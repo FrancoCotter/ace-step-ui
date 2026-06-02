@@ -34,6 +34,13 @@ function resolveAceStepPath(): string {
   if (envPath) {
     return path.isAbsolute(envPath) ? envPath : path.resolve(process.cwd(), envPath);
   }
+  
+  // Prioritize ACE1.5 sibling directory if it exists (e.g. copied from Windows)
+  const ace15Path = path.resolve(__dirname, '../../../ACE1.5');
+  if (existsSync(ace15Path)) {
+    return ace15Path;
+  }
+  
   // Default: sibling directory (server/src/services -> ../../../ACE-Step-1.5 = app/ACE-Step-1.5)
   return path.resolve(__dirname, '../../../ACE-Step-1.5');
 }
@@ -72,7 +79,7 @@ export function resolvePythonPath(baseDir: string): string {
   return path.join(baseDir, 'env', 'bin', 'python');
 }
 
-const ACESTEP_DIR = resolveAceStepPath();
+let ACESTEP_DIR = resolveAceStepPath();
 const SCRIPTS_DIR = path.join(__dirname, '../../scripts');
 const PYTHON_SCRIPT = path.join(SCRIPTS_DIR, 'simple_generate.py');
 
@@ -167,64 +174,93 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
 
   const useCot = isEnhance || isThinking;
 
-  // Complete raw positional arguments array
+  // Complete raw positional arguments array aligned exactly with the 78 inputs of generation_wrapper in generation_run_wiring.py
   const rawArgs = [
-    prompt,                                                       // Music Caption
-    lyrics,                                                       // Lyrics
-    cleanBpm,                                                     // BPM
-    params.keyScale || '',                                        // KeyScale
-    params.timeSignature || '',                                   // Time Signature
-    params.vocalLanguage || 'en',                                 // Vocal Language
-    cleanSteps,                                                   // DiT Inference Steps
-    cleanGuidance,                                                // DiT Guidance Scale
-    params.randomSeed !== false,                                  // Random Seed
-    Number(params.seed ?? -1),                                    // Seed
-    referenceAudio,                                               // Reference Audio
-    cleanDuration,                                                // Audio Duration
-    cleanBatchSize,                                               // Batch Size
-    sourceAudio,                                                  // Source Audio
-    params.audioCodes || '',                                      // LM Codes Hints
-    params.repaintingStart ?? 0.0,                                // Repainting Start
-    params.repaintingEnd ?? -1,                                   // Repainting End
-    params.instruction || 'Fill the audio semantic mask...',       // Instruction
-    params.audioCoverStrength ?? 1.0,                             // Audio Cover Strength
-    0.0,                                                          // Cover Noise Strength
-    (params.taskType === 'audio2audio' ? 'cover' : params.taskType) || 'text2music', // Task Type
-    params.useAdg ?? false,                                       // Use ADG
-    params.cfgIntervalStart ?? 0.0,                               // CFG Interval Start
-    params.cfgIntervalEnd ?? 1.0,                                 // CFG Interval End
-    params.shift ?? 3.0,                                          // Shift
-    params.inferMethod || 'ode',                                  // Inference Method
-    params.customTimesteps || '',                                 // Custom Timesteps
-    params.audioFormat || 'mp3',                                  // Audio Format
-    cleanTemperature,                                             // LM Temperature
-    isThinking,                                                   // Think
-    cleanLmCfg,                                                   // LM CFG Scale
-    cleanTopK,                                                    // LM Top-K
-    cleanTopP,                                                    // LM Top-P
-    params.lmNegativePrompt || 'NO USER INPUT',                   // LM Negative Prompt
-    useCot ? (params.useCotMetas ?? true) : false,                // CoT Metas
-    useCot ? (params.useCotCaption ?? true) : false,              // CaptionRewrite
-    useCot ? (params.useCotLanguage ?? true) : false,             // CoT Language
-    params.isFormatCaption ?? false,                              // Is Format Caption State
-    params.constrainedDecodingDebug ?? false,                     // Constrained Decoding Debug
-    params.allowLmBatch ?? true,                                  // ParallelThinking
-    params.getScores ?? false,                                    // Auto Score
-    params.getLrc ?? false,                                       // Auto LRC
-    cleanScoreScale,                                              // Quality Score Sensitivity
-    cleanChunkSize,                                               // LM Batch Chunk Size
-    params.trackName || null,                                     // Track Name
-    params.completeTrackClasses || [],                            // Track Names
-    true,                                                         // Enable Normalization
-    -1.0,                                                         // Normalization DB
-    0.0,                                                          // Latent Shift
-    1.0,                                                          // Latent Rescale
-    params.autogen ?? false,                                      // AutoGen
+    prompt,                                                       // 0: Music Caption
+    lyrics,                                                       // 1: Lyrics
+    cleanBpm,                                                     // 2: BPM
+    params.keyScale || '',                                        // 3: KeyScale
+    params.timeSignature || '',                                   // 4: Time Signature
+    params.vocalLanguage || 'en',                                 // 5: Vocal Language
+    cleanSteps,                                                   // 6: DiT Inference Steps
+    cleanGuidance,                                                // 7: DiT Guidance Scale
+    params.randomSeed !== false,                                  // 8: Random Seed
+    Number(params.seed ?? -1),                                    // 9: Seed
+    referenceAudio,                                               // 10: Reference Audio
+    cleanDuration,                                                // 11: Audio Duration
+    cleanBatchSize,                                               // 12: Batch Size
+    sourceAudio,                                                  // 13: Source Audio
+    params.audioCodes || '',                                      // 14: LM Codes Hints
+    params.repaintingStart ?? 0.0,                                // 15: Repainting Start
+    params.repaintingEnd ?? -1,                                   // 16: Repainting End
+    params.instruction || 'Fill the audio semantic mask...',       // 17: Instruction
+    params.audioCoverStrength ?? 1.0,                             // 18: Audio Cover Strength
+    0.0,                                                          // 19: Cover Noise Strength
+    (params.taskType === 'audio2audio' ? 'cover' : params.taskType) || 'text2music', // 20: Task Type
+    false,                                                        // 21: no_fsq
+    params.useAdg ?? false,                                       // 22: use_adg
+    params.cfgIntervalStart ?? 0.0,                               // 23: cfg_interval_start
+    params.cfgIntervalEnd ?? 1.0,                                 // 24: cfg_interval_end
+    params.shift ?? 3.0,                                          // 25: shift
+    params.inferMethod || 'ode',                                  // 26: infer_method
+    'euler',                                                      // 27: sampler_mode
+    0.0,                                                          // 28: velocity_norm_threshold
+    0.0,                                                          // 29: velocity_ema_factor
+    params.dcwEnabled ?? true,                                    // 30: dcw_enabled
+    params.dcwMode || 'double',                                   // 31: dcw_mode
+    params.dcwScaler !== undefined ? params.dcwScaler : (isThinking ? 0.02 : 0.05), // 32: dcw_scaler
+    params.dcwHighScaler !== undefined ? params.dcwHighScaler : (isThinking ? 0.06 : 0.02), // 33: dcw_high_scaler
+    params.dcwWavelet || 'haar',                                  // 34: dcw_wavelet
+    params.customTimesteps || '',                                 // 35: custom_timesteps
+    params.audioFormat || 'mp3',                                  // 36: audio_format
+    '128k',                                                       // 37: mp3_bitrate
+    48000,                                                        // 38: mp3_sample_rate
+    cleanTemperature,                                             // 39: lm_temperature
+    isThinking,                                                   // 40: think_checkbox
+    cleanLmCfg,                                                   // 41: lm_cfg_scale
+    cleanTopK,                                                    // 42: lm_top_k
+    cleanTopP,                                                    // 43: lm_top_p
+    params.lmNegativePrompt || 'NO USER INPUT',                   // 44: lm_negative_prompt
+    useCot ? (params.useCotMetas ?? true) : false,                // 45: use_cot_metas
+    useCot ? (params.useCotCaption ?? true) : false,              // 46: use_cot_caption
+    useCot ? (params.useCotLanguage ?? true) : false,             // 47: use_cot_language
+    params.isFormatCaption ?? false,                              // 48: is_format_caption_state
+    params.constrainedDecodingDebug ?? false,                     // 49: constrained_decoding_debug
+    params.allowLmBatch ?? true,                                  // 50: allow_lm_batch
+    params.getScores ?? false,                                    // 51: auto_score
+    params.getLrc ?? false,                                       // 52: auto_lrc
+    cleanScoreScale,                                              // 53: score_scale
+    cleanChunkSize,                                               // 54: lm_batch_chunk_size
+    params.trackName || null,                                     // 55: track_name
+    params.completeTrackClasses || [],                            // 56: complete_track_classes
+    true,                                                         // 57: enable_normalization
+    -1.0,                                                         // 58: normalization_db
+    0.0,                                                          // 59: fade_in_duration
+    0.0,                                                          // 60: fade_out_duration
+    0.0,                                                          // 61: latent_shift
+    1.0,                                                          // 62: latent_rescale
+    'balanced',                                                   // 63: repaint_mode
+    0.5,                                                          // 64: repaint_strength
+    0.0,                                                          // 65: retake_variance
+    '',                                                           // 66: retake_seed
+    false,                                                        // 67: flow_edit_morph
+    '',                                                           // 68: flow_edit_source_caption
+    '',                                                           // 69: flow_edit_source_lyrics
+    0.0,                                                          // 70: flow_edit_n_min
+    1.0,                                                          // 71: flow_edit_n_max
+    1,                                                            // 72: flow_edit_n_avg
+    params.autogen ?? false,                                      // 73: autogen_checkbox
+    0,                                                            // 74: current_batch_index
+    1,                                                            // 75: total_batches
+    null,                                                         // 76: batch_queue
+    null,                                                         // 77: generation_params_state
   ];
 
   // Type coercion and normalization map to ensure exact types for Gradio
   return rawArgs.map((val, idx) => {
-    const isStringOrObjSlot = [0, 1, 3, 4, 5, 10, 13, 14, 17, 20, 25, 26, 27, 33, 44, 45].includes(idx);
+    const isStringOrObjSlot = [
+      0, 1, 3, 4, 5, 10, 13, 14, 17, 20, 26, 27, 31, 34, 35, 36, 37, 44, 55, 56, 63, 66, 68, 69, 76, 77
+    ].includes(idx);
     
     if (!isStringOrObjSlot) {
       if (typeof val === 'string' && (val.toLowerCase() === 'true' || val.toLowerCase() === 'false')) {
@@ -352,9 +388,15 @@ export interface GenerationParams {
   trackName?: string;
   completeTrackClasses?: string[];
   isFormatCaption?: boolean;
+  dcwEnabled?: boolean;
+  dcwMode?: string;
+  dcwScaler?: number;
+  dcwHighScaler?: number;
+  dcwWavelet?: string;
 
   // Model selection
   ditModel?: string;
+  vaeModel?: string;
 }
 
 interface GenerationResult {
@@ -485,6 +527,9 @@ async function processQueue(): Promise<void> {
 
 // Submit generation job to queue
 export async function generateMusicViaAPI(params: GenerationParams): Promise<{ jobId: string }> {
+  // Re-evaluate ACESTEP_DIR in case process.env.ACESTEP_PATH was updated at runtime
+  ACESTEP_DIR = resolveAceStepPath();
+
   const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
   const job: ActiveJob = {
@@ -692,7 +737,7 @@ async function processGenerationViaPython(
     const jobOutputDir = path.join(ACESTEP_DIR, 'output', jobId);
     await mkdir(jobOutputDir, { recursive: true });
 
-    const durationToSend = params.duration && params.duration > 0 ? params.duration : 60;
+    const durationToSend = params.duration && params.duration > 0 ? params.duration : -1;
     const args = [
       '--prompt', prompt,
       '--duration', String(durationToSend),
@@ -745,6 +790,7 @@ async function processGenerationViaPython(
     if (params.lmNegativePrompt) args.push('--lm-negative-prompt', params.lmNegativePrompt);
     if (params.lmModel) args.push('--lm-model', params.lmModel);
     if (params.lmBackend) args.push('--lm-backend', params.lmBackend);
+    if (params.ditModel) args.push('--dit-model', params.ditModel);
 
     const useCot = (params.enhance ?? false) || (params.thinking ?? false);
     if (!useCot) {
@@ -759,6 +805,13 @@ async function processGenerationViaPython(
     if (params.useAdg) args.push('--use-adg');
     if (params.cfgIntervalStart !== undefined && params.cfgIntervalStart > 0) args.push('--cfg-interval-start', String(params.cfgIntervalStart));
     if (params.cfgIntervalEnd !== undefined && params.cfgIntervalEnd < 1.0) args.push('--cfg-interval-end', String(params.cfgIntervalEnd));
+
+    if (params.dcwEnabled === false) args.push('--no-dcw');
+    if (params.dcwMode) args.push('--dcw-mode', params.dcwMode);
+    if (params.dcwScaler !== undefined) args.push('--dcw-scaler', String(params.dcwScaler));
+    if (params.dcwHighScaler !== undefined) args.push('--dcw-high-scaler', String(params.dcwHighScaler));
+    if (params.dcwWavelet) args.push('--dcw-wavelet', params.dcwWavelet);
+    if (params.vaeModel) args.push('--vae-checkpoint', params.vaeModel);
 
     const result = await runPythonGeneration(args);
 
@@ -830,6 +883,8 @@ function runPythonGeneration(scriptArgs: string[], timeoutMs = 600000): Promise<
   return new Promise((resolve) => {
     const pythonPath = resolvePythonPath(ACESTEP_DIR);
     const args = [PYTHON_SCRIPT, ...scriptArgs];
+
+    console.log(`[ACE-Step] [Spawn] Spawning Python command: "${pythonPath}" ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`);
 
     const proc = spawn(pythonPath, args, {
       cwd: ACESTEP_DIR,
