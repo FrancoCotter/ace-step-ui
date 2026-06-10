@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CreatePanel } from './components/CreatePanel';
 import { SongList } from './components/SongList';
@@ -12,16 +12,15 @@ import { UserProfile } from './components/UserProfile';
 import { SettingsModal } from './components/SettingsModal';
 import { SongProfile } from './components/SongProfile';
 import { Song, GenerationParams, View, Playlist } from './types';
-import { generateApi, songsApi, playlistsApi, getAudioUrl, UserProfile as UserProfileType } from './services/api';
+import { generateApi, songsApi, playlistsApi, getAudioUrl, getCoverUrl, UserProfile as UserProfileType } from './services/api';
 import { useAuth } from './context/AuthContext';
 import { useResponsive } from './context/ResponsiveContext';
 import { I18nProvider, useI18n } from './context/I18nContext';
-import { List } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
 import { SearchPage } from './components/SearchPage';
 import { TrainingPanel } from './components/TrainingPanel';
-import { NewsPage } from './components/NewsPage';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 
@@ -39,12 +38,8 @@ function AppContent() {
   const activeJobsRef = useRef<Map<string, { tempId: string; pollInterval: ReturnType<typeof setInterval> }>>(new Map());
   const [activeJobCount, setActiveJobCount] = useState(0);
 
-  // Theme State
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || stored === 'light') return stored;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  // Theme State - local studio defaults to dark mode only.
+  const [theme] = useState<'dark'>('dark');
 
   // Navigation State - default to create view
   const [currentView, setCurrentView] = useState<View>('create');
@@ -241,7 +236,6 @@ function AppContent() {
       profileReturnView === 'song' && viewingSongId ? `/song/${viewingSongId}` :
       profileReturnView === 'playlist' && viewingPlaylistId ? `/playlist/${viewingPlaylistId}` :
       profileReturnView === 'training' ? '/training' :
-      profileReturnView === 'news' ? '/news' :
       '/';
     window.history.pushState({}, '', returnPath);
   };
@@ -268,16 +262,12 @@ function AppContent() {
 
   // Theme Effect
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
+    localStorage.removeItem('theme');
+    document.documentElement.classList.add('dark');
+  }, []);
 
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    document.documentElement.classList.add('dark');
   };
 
   // URL Routing Effect
@@ -320,8 +310,6 @@ function AppContent() {
         }
       } else if (path === '/search') {
         setCurrentView('search');
-      } else if (path === '/news') {
-        setCurrentView('news');
       }
     };
 
@@ -347,14 +335,16 @@ function AppContent() {
           title: s.title,
           lyrics: s.lyrics,
           style: s.style,
-          coverUrl: `https://picsum.photos/seed/${s.id}/400/400`,
+          coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
           duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
           createdAt: new Date(s.created_at || s.createdAt),
           tags: s.tags || [],
           audioUrl: getAudioUrl(s.audio_url, s.id),
           isPublic: s.is_public,
-          likeCount: s.like_count || 0,
-          viewCount: s.view_count || 0,
+          likeCount: s.like_count ?? s.likeCount ?? 0,
+          like_count: s.like_count ?? s.likeCount ?? 0,
+          viewCount: s.view_count ?? s.viewCount ?? 0,
+          view_count: s.view_count ?? s.viewCount ?? 0,
           userId: s.user_id,
           creator: s.creator,
           ditModel: s.ditModel,
@@ -372,7 +362,10 @@ function AppContent() {
         const likedSongs = likedSongsRes.songs.map(mapSong);
 
         const songsMap = new Map<string, Song>();
-        [...mySongs, ...likedSongs].forEach(s => songsMap.set(s.id, s));
+        [...mySongs, ...likedSongs].forEach(s => {
+          const existing = songsMap.get(s.id);
+          songsMap.set(s.id, existing ? { ...s, ...existing } : s);
+        });
 
         // Preserve any generating songs (temp songs)
         setSongs(prev => {
@@ -525,6 +518,34 @@ function AppContent() {
     // No playable songs found
     setIsPlaying(false);
   }, [currentSong, queueIndex, currentTime, isShuffle, repeatMode, playQueue, songs]);
+
+  const adjacentCoverUrls = useMemo(() => {
+    if (!currentSong) return [];
+    const queue = getActiveQueue(currentSong);
+    if (queue.length <= 1) return [];
+
+    const currentIndex = queueIndex >= 0 && queue[queueIndex]?.id === currentSong.id
+      ? queueIndex
+      : queue.findIndex(s => s.id === currentSong.id);
+    if (currentIndex === -1) return [];
+
+    const urls = new Set<string>();
+    const collectPlayableCover = (direction: 1 | -1) => {
+      for (let offset = 1; offset <= queue.length; offset++) {
+        const rawIndex = currentIndex + offset * direction;
+        if (repeatMode === 'none' && (rawIndex < 0 || rawIndex >= queue.length)) return;
+        const candidate = queue[(rawIndex + queue.length) % queue.length];
+        if (candidate?.audioUrl && !candidate.isGenerating && candidate.coverUrl) {
+          urls.add(candidate.coverUrl);
+          return;
+        }
+      }
+    };
+
+    collectPlayableCover(-1);
+    collectPlayableCover(1);
+    return Array.from(urls);
+  }, [currentSong, queueIndex, playQueue, songs, repeatMode]);
 
   useEffect(() => {
     playNextRef.current = playNext;
@@ -695,14 +716,16 @@ function AppContent() {
         title: s.title,
         lyrics: s.lyrics,
         style: s.style,
-        coverUrl: `https://picsum.photos/seed/${s.id}/400/400`,
+        coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
         duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
         createdAt: new Date(s.created_at),
         tags: s.tags || [],
         audioUrl: getAudioUrl(s.audio_url, s.id),
         isPublic: s.is_public,
-        likeCount: s.like_count || 0,
-        viewCount: s.view_count || 0,
+        likeCount: s.like_count ?? s.likeCount ?? 0,
+        like_count: s.like_count ?? s.likeCount ?? 0,
+        viewCount: s.view_count ?? s.viewCount ?? 0,
+        view_count: s.view_count ?? s.viewCount ?? 0,
         userId: s.user_id,
         creator: s.creator,
         ditModel: s.ditModel,
@@ -801,7 +824,7 @@ function AppContent() {
     title: params.title || 'Generating...',
     lyrics: '',
     style: params.style || params.songDescription || '',
-    coverUrl: 'https://picsum.photos/200/200?blur=10',
+    coverUrl: getCoverUrl(undefined, 'generating'),
     duration: '--:--',
     createdAt: createdAt ? new Date(createdAt) : new Date(),
     isGenerating: true,
@@ -833,7 +856,7 @@ function AppContent() {
       title: params.title || 'Generating...',
       lyrics: '',
       style: params.style,
-      coverUrl: 'https://picsum.photos/200/200?blur=10',
+      coverUrl: getCoverUrl(undefined, 'generating'),
       duration: '--:--',
       createdAt: new Date(),
       isGenerating: true,
@@ -999,6 +1022,13 @@ function AppContent() {
     }
   };
 
+  const syncSongViewCount = useCallback((songId: string, viewCount: number) => {
+    setSongs(prev => prev.map(s => s.id === songId ? { ...s, viewCount, view_count: viewCount } : s));
+    setPlayQueue(prev => prev.map(s => s.id === songId ? { ...s, viewCount, view_count: viewCount } : s));
+    setCurrentSong(prev => prev?.id === songId ? { ...prev, viewCount, view_count: viewCount } : prev);
+    setSelectedSong(prev => prev?.id === songId ? { ...prev, viewCount, view_count: viewCount } : prev);
+  }, []);
+
   const playSong = (song: Song, list?: Song[]) => {
     const nextQueue = list && list.length > 0
       ? list
@@ -1010,12 +1040,20 @@ function AppContent() {
     setQueueIndex(nextIndex);
 
     if (currentSong?.id !== song.id) {
-      const updatedSong = { ...song, viewCount: (song.viewCount || 0) + 1 };
+      const currentViews = song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0;
+      const updatedSong = { ...song, viewCount: currentViews + 1, view_count: currentViews + 1 };
       setCurrentSong(updatedSong);
       setSelectedSong(updatedSong);
       setIsPlaying(true);
       setSongs(prev => prev.map(s => s.id === song.id ? updatedSong : s));
-      songsApi.trackPlay(song.id, token).catch(err => console.error('Failed to track play:', err));
+      setPlayQueue(prev => prev.map(s => s.id === song.id ? updatedSong : s));
+      songsApi.trackPlay(song.id, token)
+        .then(result => {
+          if (typeof result.viewCount === 'number') {
+            syncSongViewCount(song.id, result.viewCount);
+          }
+        })
+        .catch(err => console.error('Failed to track play:', err));
     } else {
       togglePlay();
     }
@@ -1313,6 +1351,8 @@ function AppContent() {
             onReusePrompt={handleReuse}
             onDeleteSong={handleDeleteSong}
             onDeleteReferenceTrack={handleDeleteReferenceTrack}
+            currentSong={currentSong}
+            isPlaying={isPlaying}
           />
         );
       }
@@ -1381,9 +1421,6 @@ function AppContent() {
 
       case 'training':
         return <TrainingPanel />;
-
-      case 'news':
-        return <NewsPage />;
 
       case 'create':
       default:
@@ -1474,7 +1511,7 @@ function AppContent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-suno-DEFAULT text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
+    <div className="flex flex-col h-screen bg-white dark:bg-suno-DEFAULT text-zinc-900 dark:text-white font-sans antialiased selection:bg-[#9bb89d]/30">
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           currentView={currentView}
@@ -1487,8 +1524,6 @@ function AppContent() {
               window.history.pushState({}, '', '/library');
             } else if (v === 'search') {
               window.history.pushState({}, '', '/search');
-            } else if (v === 'news') {
-              window.history.pushState({}, '', '/news');
             }
             if (isMobile) setShowLeftSidebar(false);
           }}
@@ -1503,6 +1538,14 @@ function AppContent() {
         />
 
         <main className="flex-1 flex overflow-hidden relative">
+          <button
+            onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+            className="hidden md:flex absolute left-0 top-6 z-40 h-11 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-suno-panel text-zinc-500 dark:text-zinc-400 shadow-lg shadow-black/10 dark:shadow-black/30 hover:text-[#6f8f72] dark:hover:text-[#a8c9a4] hover:bg-white dark:hover:bg-[#1d1d20] transition-colors"
+            title={showLeftSidebar ? t('collapseSidebar') : t('expandSidebar')}
+            aria-label={showLeftSidebar ? t('collapseSidebar') : t('expandSidebar')}
+          >
+            {showLeftSidebar ? <ChevronLeft size={17} strokeWidth={2.4} /> : <ChevronRight size={17} strokeWidth={2.4} />}
+          </button>
           {renderContent()}
         </main>
       </div>
@@ -1534,6 +1577,7 @@ function AppContent() {
         onAddToPlaylist={() => currentSong && openAddToPlaylistModal(currentSong)}
         onDelete={() => currentSong && handleDeleteSong(currentSong)}
         onPlayFirst={playFirst}
+        preloadCoverUrls={adjacentCoverUrls}
       />
 
       <CreatePlaylistModal

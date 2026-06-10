@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import fs from 'fs/promises';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 // Load .env from project root (parent of server directory)
@@ -29,6 +31,8 @@ import { pool } from './db/pool.js';
 import './db/migrate.js';
 
 const app = express();
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Security headers
 app.use(helmet({
@@ -80,6 +84,86 @@ app.use(express.json());
 
 // Serve static audio files
 app.use('/audio', express.static(path.join(__dirname, '../public/audio')));
+app.use('/covers', express.static(path.join(__dirname, '../public/covers'), {
+  maxAge: '30d',
+  immutable: true,
+}));
+
+app.get('/api/covers/cache', async (req, res) => {
+  const rawUrl = req.query.url as string | undefined;
+  if (!rawUrl) {
+    res.status(400).json({ error: 'URL required' });
+    return;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    res.status(400).json({ error: 'Invalid URL' });
+    return;
+  }
+
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    res.status(400).json({ error: 'Only http(s) URLs are supported' });
+    return;
+  }
+
+  try {
+    const coversDir = path.join(__dirname, '../public/covers');
+    await fs.mkdir(coversDir, { recursive: true });
+
+    const urlHash = crypto.createHash('sha256').update(rawUrl).digest('hex').slice(0, 32);
+    const existingFiles = await fs.readdir(coversDir).catch(() => []);
+    const existing = existingFiles.find(file => file.startsWith(`${urlHash}.`));
+    if (existing) {
+      res.redirect(302, `/covers/${existing}`);
+      return;
+    }
+
+    let response: globalThis.Response | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      try {
+        response = await fetch(rawUrl);
+        if (response.ok) break;
+        lastError = new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error;
+      }
+      response = null;
+      await sleep(Math.min(7000, 600 * (attempt + 1)));
+    }
+
+    if (!response?.ok) {
+      console.error('Cover cache fetch failed after retries:', lastError);
+      res.status(502).json({ error: 'Failed to fetch cover after retries' });
+      return;
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) {
+      res.status(415).json({ error: 'URL is not an image' });
+      return;
+    }
+
+    const extension = contentType.includes('png')
+      ? 'png'
+      : contentType.includes('webp')
+        ? 'webp'
+        : contentType.includes('gif')
+          ? 'gif'
+          : 'jpg';
+    const targetFile = `${urlHash}.${extension}`;
+    const targetPath = path.join(coversDir, targetFile);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await fs.writeFile(targetPath, buffer);
+    res.redirect(302, `/covers/${targetFile}`);
+  } catch (error) {
+    console.error('Cover cache error:', error);
+    res.status(500).json({ error: 'Failed to cache cover' });
+  }
+});
 
 // Audio Editor (AudioMass) - needs relaxed CSP for inline scripts and external images
 app.use('/editor', (req, res, next) => {
@@ -107,7 +191,7 @@ app.use('/demucs-web', (req, res, next) => {
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'ACE-Step UI API' });
+  res.json({ status: 'ok', service: 'ACEStudio API' });
 });
 
 // oEmbed endpoint for rich embeds
@@ -143,7 +227,7 @@ app.get('/api/oembed', async (req, res) => {
     res.json({
       version: '1.0',
       type: 'rich',
-      provider_name: 'ACE-Step UI',
+      provider_name: 'ACEStudio',
       provider_url: config.frontendUrl,
       title: song.title,
       author_name: song.creator,
@@ -191,7 +275,7 @@ app.get('/song/:id', async (req, res) => {
     const song = result.rows[0];
     const coverUrl = song.cover_url || `https://picsum.photos/seed/${song.id}/1200/630`;
     const title = `${song.title} by ${song.creator}`;
-    const description = `🎵 ${song.style} • Create your own AI music free on ACE-Step UI`;
+    const description = `🎵 ${song.style} • Create your own AI music locally with ACEStudio`;
     const pageUrl = `${config.frontendUrl}/song/${song.id}`;
 
     res.send(`<!DOCTYPE html>
@@ -199,7 +283,7 @@ app.get('/song/:id', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} | ACE-Step UI</title>
+  <title>${title} | ACEStudio</title>
   <meta name="title" content="${title}">
   <meta name="description" content="${description}">
   <meta property="og:type" content="music.song">
@@ -207,7 +291,7 @@ app.get('/song/:id', async (req, res) => {
   <meta property="og:title" content="${title}">
   <meta property="og:description" content="${description}">
   <meta property="og:image" content="${coverUrl}">
-  <meta property="og:site_name" content="ACE-Step UI">
+  <meta property="og:site_name" content="ACEStudio">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${title}">
   <meta name="twitter:description" content="${description}">
@@ -215,7 +299,7 @@ app.get('/song/:id', async (req, res) => {
   <meta http-equiv="refresh" content="0;url=${config.frontendUrl}?song=${song.id}">
 </head>
 <body>
-  <p>Redirecting to <a href="${config.frontendUrl}?song=${song.id}">ACE-Step UI</a>...</p>
+  <p>Redirecting to <a href="${config.frontendUrl}?song=${song.id}">ACEStudio</a>...</p>
 </body>
 </html>`);
   } catch (error) {
@@ -458,7 +542,7 @@ cron.schedule('0 3 * * *', async () => {
 
 // Start server on all interfaces for LAN access
 app.listen(config.port, '0.0.0.0', () => {
-  console.log(`ACE-Step UI Server running on http://localhost:${config.port}`);
+  console.log(`ACEStudio Server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`ACE-Step API: ${config.acestep.apiUrl}`);
 

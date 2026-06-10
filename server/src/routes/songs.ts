@@ -164,6 +164,7 @@ router.get('/public/featured', optionalAuthMiddleware, async (_req: Authenticate
         creator: row.creator,
         creator_avatar: row.creator_avatar,
         user_id: row.user_id,
+        generation_params: row.generation_params,
         is_public: true
       }))
     );
@@ -495,7 +496,7 @@ router.get('/liked/list', authMiddleware, async (req: AuthenticatedRequest, res:
   try {
     const result = await pool.query(
       `SELECT s.id, s.title, s.lyrics, s.style, s.cover_url, s.audio_url,
-              s.duration, s.tags, s.like_count, s.created_at, s.is_public,
+              s.duration, s.tags, s.like_count, s.view_count, s.created_at, s.is_public,
               COALESCE(u.username, 'Anonymous') as creator, s.generation_params
        FROM liked_songs ls
        JOIN songs s ON ls.song_id = s.id

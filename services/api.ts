@@ -14,6 +14,25 @@ export function getAudioUrl(audioUrl: string | undefined | null, songId?: string
   return audioUrl;
 }
 
+export function getCoverUrl(coverUrl: string | undefined | null, seed?: string): string | undefined {
+  const sourceUrl = coverUrl || (seed ? `https://picsum.photos/seed/${encodeURIComponent(seed)}/400/400` : undefined);
+  if (!sourceUrl) return undefined;
+
+  if (
+    sourceUrl.startsWith('/covers/') ||
+    sourceUrl.startsWith('/audio/') ||
+    sourceUrl.startsWith('data:')
+  ) {
+    return sourceUrl;
+  }
+
+  if (sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://')) {
+    return `/api/covers/cache?url=${encodeURIComponent(sourceUrl)}`;
+  }
+
+  return sourceUrl;
+}
+
 interface ApiOptions {
   method?: string;
   body?: unknown;
@@ -120,6 +139,8 @@ function transformSongs(songs: Song[]): Song[] {
       ...song,
       audio_url: resolvedUrl,
       audioUrl: resolvedUrl,
+      cover_url: getCoverUrl(song.cover_url, song.id),
+      coverUrl: getCoverUrl(song.cover_url, song.id),
     };
   });
 }
@@ -144,14 +165,33 @@ export const songsApi = {
     const result = await api(`/api/songs/${id}`, { token: token || undefined }) as { song: Song };
     const rawUrl = result.song.audio_url || result.song.audioUrl;
     const resolvedUrl = getAudioUrl(rawUrl, result.song.id);
-    return { song: { ...result.song, audio_url: resolvedUrl, audioUrl: resolvedUrl } };
+    const resolvedCoverUrl = getCoverUrl(result.song.cover_url || result.song.coverUrl, result.song.id);
+    return {
+      song: {
+        ...result.song,
+        audio_url: resolvedUrl,
+        audioUrl: resolvedUrl,
+        cover_url: resolvedCoverUrl,
+        coverUrl: resolvedCoverUrl,
+      },
+    };
   },
 
   getFullSong: async (id: string, token?: string | null): Promise<{ song: Song, comments: any[] }> => {
     const result = await api(`/api/songs/${id}/full`, { token: token || undefined }) as { song: Song, comments: any[] };
     const rawUrl = result.song.audio_url || result.song.audioUrl;
     const resolvedUrl = getAudioUrl(rawUrl, result.song.id);
-    return { ...result, song: { ...result.song, audio_url: resolvedUrl, audioUrl: resolvedUrl } };
+    const resolvedCoverUrl = getCoverUrl(result.song.cover_url || result.song.coverUrl, result.song.id);
+    return {
+      ...result,
+      song: {
+        ...result.song,
+        audio_url: resolvedUrl,
+        audioUrl: resolvedUrl,
+        cover_url: resolvedCoverUrl,
+        coverUrl: resolvedCoverUrl,
+      },
+    };
   },
 
   createSong: (song: Partial<Song>, token: string): Promise<{ song: Song }> =>
@@ -170,8 +210,8 @@ export const songsApi = {
         lyrics: s.lyrics,
         style: s.style,
         caption: s.caption,
-        cover_url: s.cover_url,
-        coverUrl: s.cover_url || s.coverUrl || `https://picsum.photos/seed/${s.id}/400/400`,
+        cover_url: getCoverUrl(s.cover_url || s.coverUrl, s.id),
+        coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
         duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
         createdAt: new Date(s.created_at || s.createdAt),
         created_at: s.created_at,

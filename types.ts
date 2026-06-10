@@ -157,5 +157,5 @@ export interface UserProfile {
   };
 }
 
-// Simplified views for ACE-Step UI
-export type View = 'create' | 'library' | 'training' | 'profile' | 'song' | 'playlist' | 'search' | 'news';
+// Simplified views for ACEStudio
+export type View = 'create' | 'library' | 'training' | 'profile' | 'song' | 'playlist' | 'search';

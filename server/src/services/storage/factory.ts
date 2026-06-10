@@ -8,7 +8,7 @@ export function getStorageProvider(): StorageProvider {
     return storageInstance;
   }
 
-  // Always use local storage for ACE-Step UI
+  // Always use local storage for ACEStudio
   console.log('Initializing local storage provider');
   storageInstance = new LocalStorageProvider();
 

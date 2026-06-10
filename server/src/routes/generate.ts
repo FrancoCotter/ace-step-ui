@@ -73,7 +73,7 @@ async function uploadSyncedLyricsIfAvailable(
   storage: StorageProvider,
   sourceAudioUrl: string,
   finalAudioStorageKey: string
-): Promise<void> {
+): Promise<boolean> {
   const lyricCandidates = [
     replaceExtension(sourceAudioUrl, '.lrc'),
     replaceExtension(sourceAudioUrl, '.vtt'),
@@ -87,11 +87,13 @@ async function uploadSyncedLyricsIfAvailable(
     try {
       await storage.upload(lrcStorageKey, lyricBuffer, 'text/plain; charset=utf-8');
       console.log(`Stored synced lyrics for ${sourceAudioUrl} at ${storage.getPublicUrl(lrcStorageKey)}`);
+      return true;
     } catch (err) {
       console.warn(`Failed to store synced lyrics for ${sourceAudioUrl}:`, err);
     }
-    return;
+    return false;
   }
+  return false;
 }
 
 const audioUpload = multer({
@@ -491,7 +493,7 @@ router.get('/status/:jobId', authMiddleware, async (req: AuthenticatedRequest, r
 
               const songId = generateUUID();
               const scorePayload = Array.isArray(aceStatus.result.scores) ? aceStatus.result.scores[i] : undefined;
-              const songGenerationParams = scorePayload
+              let songGenerationParams = scorePayload
                 ? { ...params, score: scorePayload, scores: scorePayload }
                 : params;
 
@@ -500,7 +502,11 @@ router.get('/status/:jobId', authMiddleware, async (req: AuthenticatedRequest, r
                 const ext = audioUrl.includes('.flac') ? '.flac' : '.mp3';
                 const storageKey = `${req.user!.id}/${songId}${ext}`;
                 await storage.upload(storageKey, buffer, `audio/${ext.slice(1)}`);
-                await uploadSyncedLyricsIfAvailable(storage, audioUrl, storageKey);
+                const hasSyncedLyrics = await uploadSyncedLyricsIfAvailable(storage, audioUrl, storageKey);
+                songGenerationParams = {
+                  ...songGenerationParams,
+                  hasSyncedLyrics,
+                };
                 const storedPath = storage.getPublicUrl(storageKey);
 
                 await pool.query(

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Song } from '../types';
-import { Play, MoreHorizontal, Heart, ThumbsDown, ListPlus, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Share2, Video, Info, Clock, BarChart3, X } from 'lucide-react';
+import { Play, MoreHorizontal, Heart, ThumbsDown, ListPlus, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Share2, Video, Info, Clock, BarChart3, X, Mic2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
@@ -58,6 +58,33 @@ const getModelDisplayName = (modelId?: string): string => {
 
 const getSongModelId = (song: Song): string | undefined => {
     return song.ditModel || song.generationParams?.ditModel || song.generationParams?.dit_model;
+};
+
+const getExplicitDynamicLyricsFlag = (song: Song): boolean | undefined => {
+    const record = song as Song & Record<string, unknown>;
+    const params = (song.generationParams || {}) as Record<string, unknown>;
+    const explicitSyncedFlag =
+        record.hasSyncedLyrics ??
+        record.has_synced_lyrics ??
+        params.hasSyncedLyrics ??
+        params.has_synced_lyrics ??
+        params.syncedLyrics;
+
+    if (typeof explicitSyncedFlag === 'boolean') {
+        return explicitSyncedFlag;
+    }
+
+    return undefined;
+};
+
+const shouldProbeDynamicLyrics = (song: Song): boolean => {
+    const params = (song.generationParams || {}) as Record<string, unknown>;
+    return Boolean(song.audioUrl && (params.getLrc || params.get_lrc));
+};
+
+const getSyncedLyricsUrl = (song: Song): string | undefined => {
+    if (!song.audioUrl) return undefined;
+    return song.audioUrl.replace(/\.[^/.]+$/, '.lrc');
 };
 
 const getSongScorePayload = (song: Song): unknown => {
@@ -368,7 +395,7 @@ export const SongList: React.FC<SongListProps> = ({
                                             <div className={`
                                      w-4 h-4 rounded border flex items-center justify-center transition-all
                                      ${activeFilters.has(filter.id)
-                                                    ? 'bg-pink-600 border-pink-600'
+                                                    ? 'bg-[#8fb68f] border-[#8fb68f]'
                                                     : 'border-zinc-300 dark:border-zinc-600 group-hover:border-zinc-400 dark:group-hover:border-zinc-500'
                                                 }
                                  `}>
@@ -393,44 +420,44 @@ export const SongList: React.FC<SongListProps> = ({
                             Select
                         </button>
                     </div>
-
-                    {isSelecting && (
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-4 py-3">
-                            <div className="text-sm text-zinc-600 dark:text-zinc-300">
-                                {selectedSongs.length} selected
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        const next = new Set<string>();
-                                        if (!allSelected) {
-                                            selectableSongs.forEach(song => next.add(song.id));
-                                        }
-                                        setSelectedIds(next);
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-white/20"
-                                >
-                                    {allSelected ? 'Clear all' : 'Select all'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (!selectedSongs.length) return;
-                                        onDeleteMany?.(selectedSongs);
-                                        setSelectedIds(new Set());
-                                        setIsSelecting(false);
-                                    }}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${selectedSongs.length
-                                            ? 'border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10'
-                                            : 'border-zinc-200 dark:border-white/10 text-zinc-400 cursor-not-allowed'
-                                        }`}
-                                    disabled={!selectedSongs.length}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
+
+                {isSelecting && (
+                    <div className="sticky top-3 z-30 mb-8 flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/95 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur dark:border-white/10 dark:bg-zinc-950/95 dark:shadow-black/20">
+                        <div className="text-sm text-zinc-600 dark:text-zinc-300">
+                            {selectedSongs.length} selected
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    const next = new Set<string>();
+                                    if (!allSelected) {
+                                        selectableSongs.forEach(song => next.add(song.id));
+                                    }
+                                    setSelectedIds(next);
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-white/20"
+                            >
+                                {allSelected ? 'Clear all' : 'Select all'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!selectedSongs.length) return;
+                                    onDeleteMany?.(selectedSongs);
+                                    setSelectedIds(new Set());
+                                    setIsSelecting(false);
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${selectedSongs.length
+                                        ? 'border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10'
+                                        : 'border-zinc-200 dark:border-white/10 text-zinc-400 cursor-not-allowed'
+                                    }`}
+                                disabled={!selectedSongs.length}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* List */}
                 <div className="space-y-2"> {/* Reduced vertical spacing */}
@@ -442,7 +469,7 @@ export const SongList: React.FC<SongListProps> = ({
                             <p className="font-medium">{t('noSongsMatchFilters')}</p>
                             <button
                                 onClick={() => { setActiveFilters(new Set()); setSearchQuery(''); }}
-                                className="text-pink-600 dark:text-pink-500 text-sm font-bold hover:underline"
+                                className="text-[#6f8f72] dark:text-[#a8c9a4] text-sm font-bold hover:underline"
                             >
                                 {t('clearFilters')}
                             </button>
@@ -571,10 +598,51 @@ const SongItem: React.FC<SongItemProps> = ({
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState(song.title);
     const titleInputRef = useRef<HTMLInputElement>(null);
+    const explicitDynamicLyrics = getExplicitDynamicLyricsFlag(song);
+    const [hasVerifiedDynamicLyrics, setHasVerifiedDynamicLyrics] = useState(explicitDynamicLyrics === true);
     const scorePayload = getSongScorePayload(song);
     const scoreRequested = hasRequestedScores(song);
     const formattedScorePayload = formatScorePayload(scorePayload);
     const lyricAlignmentScore = parseLyricAlignmentScore(formattedScorePayload);
+
+    useEffect(() => {
+        setImageError(false);
+    }, [song.id, song.coverUrl]);
+
+    useEffect(() => {
+        if (explicitDynamicLyrics !== undefined) {
+            setHasVerifiedDynamicLyrics(explicitDynamicLyrics);
+            return;
+        }
+
+        if (!shouldProbeDynamicLyrics(song)) {
+            setHasVerifiedDynamicLyrics(false);
+            return;
+        }
+
+        const lyricsUrl = getSyncedLyricsUrl(song);
+        if (!lyricsUrl) {
+            setHasVerifiedDynamicLyrics(false);
+            return;
+        }
+
+        const controller = new AbortController();
+        setHasVerifiedDynamicLyrics(false);
+
+        fetch(lyricsUrl, { cache: 'force-cache', signal: controller.signal })
+            .then(response => {
+                if (!controller.signal.aborted) {
+                    setHasVerifiedDynamicLyrics(response.ok);
+                }
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setHasVerifiedDynamicLyrics(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [song, explicitDynamicLyrics]);
 
     useEffect(() => {
         if (isEditingTitle && titleInputRef.current) {
@@ -649,7 +717,7 @@ const SongItem: React.FC<SongItemProps> = ({
                         onToggleSelect();
                     }}
                     className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked
-                            ? 'bg-pink-600 border-pink-600 text-white'
+                            ? 'bg-[#8fb68f] border-[#8fb68f] text-[#132018]'
                             : 'border-zinc-300 dark:border-zinc-600 text-transparent hover:border-zinc-400 dark:hover:border-zinc-500'
                         } ${song.isGenerating ? 'opacity-40 cursor-not-allowed' : ''}`}
                     disabled={song.isGenerating}
@@ -686,10 +754,10 @@ const SongItem: React.FC<SongItemProps> = ({
                         ) : (
                             /* Generating - Music Waveform Animation */
                             <div className="flex items-end gap-1 h-6">
-                                <div className="w-1 bg-pink-500 rounded-full music-bar-anim" style={{ animationDelay: '0.0s' }}></div>
-                                <div className="w-1 bg-pink-500 rounded-full music-bar-anim" style={{ animationDelay: '0.2s' }}></div>
-                                <div className="w-1 bg-pink-500 rounded-full music-bar-anim" style={{ animationDelay: '0.4s' }}></div>
-                                <div className="w-1 bg-pink-500 rounded-full music-bar-anim" style={{ animationDelay: '0.1s' }}></div>
+                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.0s' }}></div>
+                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.2s' }}></div>
+                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.4s' }}></div>
+                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.1s' }}></div>
                             </div>
                         )}
                     </div>
@@ -725,11 +793,11 @@ const SongItem: React.FC<SongItemProps> = ({
                                 onBlur={handleSaveTitle}
                                 onKeyDown={handleTitleKeyDown}
                                 onClick={(e) => e.stopPropagation()}
-                                className="font-bold text-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-pink-500 focus:outline-none text-zinc-900 dark:text-white min-w-0 flex-1"
+                                className="font-bold text-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-[#8fb68f] focus:outline-none text-zinc-900 dark:text-white min-w-0 flex-1"
                             />
                         ) : (
                             <h3
-                                className={`font-bold text-lg truncate ${isCurrent ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
+                                className={`min-w-0 font-bold text-lg truncate ${isCurrent ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
                                 onClick={(e) => {
                                     if (isOwner && !song.isGenerating) {
                                         e.stopPropagation();
@@ -741,11 +809,20 @@ const SongItem: React.FC<SongItemProps> = ({
                             </h3>
                         )}
                         <span
-                            className="inline-flex items-center justify-center text-[9px] font-bold text-[#16301f] bg-[#8fbc8f] border border-[#a7cda6] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                            className="inline-flex shrink-0 items-center justify-center text-[9px] font-bold text-[#16301f] bg-[#8fbc8f] border border-[#a7cda6] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
                             title={`DiT model: ${getSongModelId(song) || 'unknown'}`}
                         >
                             {getModelDisplayName(getSongModelId(song))}
                         </span>
+                        {hasVerifiedDynamicLyrics && (
+                            <span
+                                className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-[#24412f] bg-[#c7d8c9] border border-[#d9e4d9] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:text-[#dcebdd] dark:bg-[#8fb68f]/20 dark:border-[#8fb68f]/35"
+                                title="Synced lyrics available in fullscreen"
+                            >
+                                <Mic2 size={10} strokeWidth={2.5} />
+                                LRC
+                            </span>
+                        )}
                         {song.isPublic === false && (
                             <Lock size={12} className="text-zinc-400 dark:text-zinc-500" />
                         )}
@@ -801,7 +878,7 @@ const SongItem: React.FC<SongItemProps> = ({
                 {!song.isGenerating && (
                     <div className="flex items-center gap-1 pt-2">
                         <button
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors ${isLiked ? 'text-pink-600 dark:text-pink-500 bg-pink-100 dark:bg-pink-500/10' : 'text-zinc-400 hover:text-black dark:hover:text-white'}`}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'text-zinc-400 hover:text-black dark:hover:text-white'}`}
                             onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
                         >
                             <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />

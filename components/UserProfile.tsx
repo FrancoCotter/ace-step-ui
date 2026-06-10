@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Song, Playlist } from '../types';
-import { usersApi, getAudioUrl, UserProfile as UserProfileType, songsApi } from '../services/api';
+import { usersApi, getAudioUrl, getCoverUrl, UserProfile as UserProfileType, songsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Play, Pause, Heart, Eye, Users, Music as MusicIcon, ChevronRight, Share2, MoreHorizontal, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -75,7 +75,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                 title: s.title,
                 lyrics: s.lyrics,
                 style: s.style,
-                coverUrl: `https://picsum.photos/seed/${s.id}/400/400`,
+                coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
                 duration: s.duration ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
                 createdAt: new Date(s.created_at),
                 tags: s.tags || [],
@@ -442,7 +442,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             className="aspect-square rounded-lg overflow-hidden mb-2 md:mb-3 relative bg-zinc-200 dark:bg-zinc-800 cursor-pointer"
                                         >
                                             <img src={song.coverUrl} alt={song.title} className={`w-full h-full object-cover transition-transform duration-500 ${isCurrentlyPlaying ? 'scale-105' : 'group-hover:scale-105'}`} />
-                                            <div className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${isCurrentSong ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                            <div className="absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
                                                 <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white flex items-center justify-center shadow-lg">
                                                     {isCurrentlyPlaying ? (
                                                         <Pause size={20} className="text-black fill-black md:w-6 md:h-6" />
@@ -453,22 +453,22 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             </div>
                                             {isCurrentlyPlaying && (
                                                 <div className="absolute bottom-2 left-2 flex items-center gap-1">
-                                                    <span className="w-1 h-3 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
-                                                    <span className="w-1 h-4 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                                                    <span className="w-1 h-2 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                                                    <span className="w-1 h-5 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
+                                                    <span className="w-1 h-3 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                                                    <span className="w-1 h-4 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                                    <span className="w-1 h-2 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                                    <span className="w-1 h-5 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex-1 min-w-0">
-                                                <h3 className={`font-semibold truncate mb-1 text-sm md:text-base ${isCurrentSong ? 'text-pink-500' : 'text-zinc-900 dark:text-white'}`}>{song.title}</h3>
+                                                <h3 className={`font-semibold truncate mb-1 text-sm md:text-base ${isCurrentSong ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'}`}>{song.title}</h3>
                                                 <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 truncate mb-2">{song.style}</p>
                                             </div>
                                             {onToggleLike && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onToggleLike(song.id); }}
-                                                    className={`p-1.5 rounded-full transition-colors ${isLiked ? 'text-pink-500' : 'text-zinc-400 hover:text-pink-500'}`}
+                                                    className={`p-1.5 rounded-full transition-colors ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400 hover:text-[#6f8f72] dark:hover:text-[#a8c9a4]'}`}
                                                 >
                                                     <Heart size={16} className={isLiked ? 'fill-current' : ''} />
                                                 </button>
@@ -476,7 +476,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                         </div>
                                         <div className="flex items-center gap-3 text-xs text-zinc-500">
                                             <span className="flex items-center gap-1">
-                                                <Heart size={12} className={isLiked ? 'fill-pink-500 text-pink-500' : ''} /> {song.likeCount || 0}
+                                                <Heart size={12} className={isLiked ? 'fill-[#8fb68f] text-[#6f8f72] dark:text-[#a8c9a4]' : ''} /> {song.likeCount || 0}
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Eye size={12} /> {song.viewCount || 0}
@@ -527,14 +527,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                 return (
                                     <div
                                         key={song.id}
-                                        className={`group flex items-center gap-3 md:gap-4 p-2 md:p-3 rounded-lg cursor-pointer transition-colors ${isCurrentSong ? 'bg-pink-50 dark:bg-pink-500/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'}`}
+                                        className={`group flex items-center gap-3 md:gap-4 p-2 md:p-3 rounded-lg cursor-pointer transition-colors ${isCurrentSong ? 'bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'}`}
                                     >
                                         <div
                                             onClick={() => onPlaySong(song, displaySongs)}
                                             className="relative w-14 h-14 md:w-16 md:h-16 flex-shrink-0 rounded-md overflow-hidden bg-zinc-200 dark:bg-zinc-800"
                                         >
                                             <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
-                                            <div className={`absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center ${isCurrentSong ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                            <div className="absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
                                                 {isCurrentlyPlaying ? (
                                                     <Pause size={18} className="text-white fill-white md:w-5 md:h-5" />
                                                 ) : (
@@ -543,17 +543,17 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             </div>
                                             {isCurrentlyPlaying && (
                                                 <div className="absolute bottom-1 left-1 flex items-center gap-0.5">
-                                                    <span className="w-0.5 h-2 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
-                                                    <span className="w-0.5 h-3 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                                                    <span className="w-0.5 h-1.5 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                                    <span className="w-0.5 h-2 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                                                    <span className="w-0.5 h-3 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                                    <span className="w-0.5 h-1.5 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0" onClick={() => onPlaySong(song, displaySongs)}>
-                                            <h3 className={`font-semibold truncate text-sm md:text-base ${isCurrentSong ? 'text-pink-500' : 'text-zinc-900 dark:text-white'}`}>{song.title}</h3>
+                                            <h3 className={`font-semibold truncate text-sm md:text-base ${isCurrentSong ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'}`}>{song.title}</h3>
                                             <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 truncate">{song.style}</p>
                                             <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                                                <span className="flex items-center gap-1"><Heart size={10} className={isLiked ? 'fill-pink-500 text-pink-500' : ''} /> {song.likeCount || 0}</span>
+                                                <span className="flex items-center gap-1"><Heart size={10} className={isLiked ? 'fill-[#8fb68f] text-[#6f8f72] dark:text-[#a8c9a4]' : ''} /> {song.likeCount || 0}</span>
                                                 <span className="flex items-center gap-1"><Play size={10} /> {song.viewCount || 0}</span>
                                                 <span>{song.duration}</span>
                                             </div>
@@ -561,7 +561,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                         {onToggleLike && (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onToggleLike(song.id); }}
-                                                className={`p-2 rounded-full transition-colors flex-shrink-0 ${isLiked ? 'text-pink-500' : 'text-zinc-400 hover:text-pink-500'}`}
+                                                className={`p-2 rounded-full transition-colors flex-shrink-0 ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400 hover:text-[#6f8f72] dark:hover:text-[#a8c9a4]'}`}
                                             >
                                                 <Heart size={18} className={isLiked ? 'fill-current' : ''} />
                                             </button>

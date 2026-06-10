@@ -1,8 +1,9 @@
 import React from 'react';
-import { Library, Disc, Search, LogIn, LogOut, Sun, Moon, GraduationCap, Newspaper } from 'lucide-react';
+import { Library, Disc, Search, LogIn, Sun, Moon, GraduationCap } from 'lucide-react';
 import { View } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
+import { BrandMark } from './BrandMark';
 
 interface SidebarProps {
   currentView: View;
@@ -48,42 +49,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ${isOpen ? 'w-[200px]' : 'w-[72px]'}
       `}>
       {/* Logo & Brand */}
-      <div className="px-3 mb-8 flex items-center justify-between">
+      <div className="px-3 mb-8 flex items-center">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform flex-shrink-0"
+            className="w-10 h-10 rounded-2xl bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] text-[#132018] flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform flex-shrink-0"
             onClick={() => onNavigate('create')}
             title={t('aceStepUI')}
           >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <BrandMark className="w-6 h-6" />
           </div>
           {isOpen && (
-            <span className="text-lg font-bold text-zinc-900 dark:text-white whitespace-nowrap">ACE Step</span>
+            <span className="text-lg font-bold text-zinc-900 dark:text-white whitespace-nowrap">ACEStudio</span>
           )}
         </div>
-        {/* Collapse/Expand Button */}
-        {onToggle && (
-          <button
-            onClick={onToggle}
-            className="w-8 h-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/10 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-black dark:hover:text-white transition-colors flex-shrink-0"
-            title={isOpen ? t('collapseSidebar') : t('expandSidebar')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              )}
-            </svg>
-          </button>
-        )}
       </div>
 
-      <nav className="flex-1 flex flex-col gap-2 w-full px-3">
+      <nav className="flex-1 min-h-0 flex flex-col gap-2 w-full px-3 overflow-y-auto scrollbar-hide">
         <NavItem
           icon={<Disc size={20} />}
           label={t('create')}
@@ -112,31 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => onNavigate('training')}
           isExpanded={isOpen}
         />
-        <NavItem
-          icon={<Newspaper size={20} />}
-          label={t('news')}
-          active={currentView === 'news'}
-          onClick={() => onNavigate('news')}
-          isExpanded={isOpen}
-        />
-
         <div className="mt-auto flex flex-col gap-2">
           {/* Theme Toggle */}
-          <button
-            onClick={onToggleTheme}
-            className={`
-              w-full rounded-xl flex items-center gap-3 transition-all duration-200 text-zinc-500 dark:text-zinc-400 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5
-              ${isOpen ? 'px-3 py-2.5 justify-start' : 'aspect-square justify-center'}
-            `}
-            title={theme === 'dark' ? t('lightMode') : t('darkMode')}
-          >
-            <div className="flex-shrink-0">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</div>
-            {isOpen && (
-              <span className="text-sm font-medium whitespace-nowrap">
-                {theme === 'dark' ? t('lightMode') : t('darkMode')}
-              </span>
-            )}
-          </button>
+        
 
           {user ? (
             <>
@@ -158,26 +117,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </span>
                 )}
               </button>
-              {/* Logout */}
-              <button
-                onClick={onLogout}
-                className={`
-                  w-full rounded-xl flex items-center gap-3 transition-all duration-200 text-zinc-500 hover:text-red-500 hover:bg-red-500/10
-                  ${isOpen ? 'px-3 py-2.5 justify-start' : 'aspect-square justify-center'}
-                `}
-                title={t('signOut')}
-              >
-                <div className="flex-shrink-0"><LogOut size={20} /></div>
-                {isOpen && (
-                  <span className="text-sm font-medium whitespace-nowrap">{t('signOut')}</span>
-                )}
-              </button>
             </>
           ) : (
             <button
               onClick={onLogin}
               className={`
-                w-full rounded-xl flex items-center gap-3 transition-all duration-200 text-zinc-500 dark:text-zinc-400 hover:text-pink-500 hover:bg-zinc-100 dark:hover:bg-white/5
+                w-full rounded-xl flex items-center gap-3 transition-all duration-200 text-zinc-500 dark:text-zinc-400 hover:text-[#6f8f72] dark:hover:text-[#a8c9a4] hover:bg-zinc-100 dark:hover:bg-white/5
                 ${isOpen ? 'px-3 py-2.5 justify-start' : 'aspect-square justify-center'}
               `}
               title={t('signIn')}
@@ -213,7 +158,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, isExpan
     `}
     title={label}
   >
-    {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-pink-500 rounded-r-full"></div>}
+    {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 bg-[#8fb68f] rounded-r-full"></div>}
     <div className="flex-shrink-0">{icon}</div>
     {isExpanded && (
       <span className="text-sm font-medium whitespace-nowrap">{label}</span>

@@ -19,7 +19,7 @@ export const translations = {
     settings: 'Settings',
     
     // Username Modal
-    welcomeTitle: 'Welcome to ACE-Step UI',
+    welcomeTitle: 'Welcome to ACEStudio',
     welcomeSubtitle: 'Enter your name to get started creating AI music',
     yourName: 'Your Name',
     enterYourName: 'Enter your name',
@@ -43,7 +43,7 @@ export const translations = {
     failedToDeleteSong: 'Failed to delete song',
     
     // Sidebar
-    aceStepUI: 'ACE-Step UI',
+    aceStepUI: 'ACEStudio',
     collapseSidebar: 'Collapse Sidebar',
     expandSidebar: 'Expand Sidebar',
 
@@ -80,6 +80,13 @@ export const translations = {
     version: 'Version',
     localAIMusicGenerator: 'Local AI Music Generator',
     poweredBy: 'Powered by ACE-Step 1.5. Open source and free to use.',
+    studioDescription: 'A local-first music studio interface customized for ACE-Step 1.5 workflows, focused on generation, lyrics, video visuals, and library playback.',
+    studioCustomization: 'Studio Customization',
+    studioCustomizationDescription: 'Local UI/UX direction, workflow tuning, and ACEStudio customization.',
+    studioRepo: 'Studio Repo',
+    originalProject: 'Original Project',
+    originalProjectDescription: 'Built on the original ACE-Step UI project and powered by ACE-Step 1.5.',
+    originalRepo: 'Original Repo',
     createdBy: 'Created by Ambsd',
     localizedBy: 'Localization & Training by bdsqlsz',
     follow: 'Follow',
@@ -509,7 +516,7 @@ export const translations = {
     shareViaEmail: 'Share via Email',
     copyLink: 'Copy Link',
     emailSubject: 'Check out this AI song',
-    emailBody: 'Hey!\n\nI created this AI-generated song and thought you\'d love it:\n\n"{title}" by {creator}\n{style}\n\nListen here: {url}\n\nMade with ACE-Step UI - free and open source local AI music generation!',
+    emailBody: 'Hey!\n\nI created this AI-generated song and thought you\'d love it:\n\n"{title}" by {creator}\n{style}\n\nListen here: {url}\n\nMade with ACEStudio - free and open source local AI music generation!',
     
     // Reference Modal
     referenceModalTitle: 'Reference',
@@ -618,7 +625,7 @@ export const translations = {
     settings: '设置',
     
     // Username Modal
-    welcomeTitle: '欢迎使用 ACE-Step UI',
+    welcomeTitle: '欢迎使用 ACEStudio',
     welcomeSubtitle: '输入您的名字开始创作 AI 音乐',
     yourName: '您的名字',
     enterYourName: '请输入您的名字',
@@ -642,7 +649,7 @@ export const translations = {
     failedToDeleteSong: '删除歌曲失败',
     
     // Sidebar
-    aceStepUI: 'ACE-Step UI',
+    aceStepUI: 'ACEStudio',
     collapseSidebar: '收起侧边栏',
     expandSidebar: '展开侧边栏',
 
@@ -679,6 +686,13 @@ export const translations = {
     version: '版本',
     localAIMusicGenerator: '本地 AI 音乐生成器',
     poweredBy: '由 ACE-Step 1.5 驱动。开源免费使用。',
+    studioDescription: '为 ACE-Step 1.5 工作流定制的本地优先音乐工作室界面，专注于生成、歌词、视频视觉和音乐库播放。',
+    studioCustomization: '工作室定制',
+    studioCustomizationDescription: '本地 UI/UX 方向、工作流调校，以及 ACEStudio 定制。',
+    studioRepo: 'Studio 仓库',
+    originalProject: '原始项目',
+    originalProjectDescription: '基于原始 ACE-Step UI 项目构建，并由 ACE-Step 1.5 驱动。',
+    originalRepo: '原始仓库',
     createdBy: '开发者 Ambsd',
     localizedBy: '本地化翻译 & 训练 青龙圣者',
     follow: '关注',
@@ -1108,7 +1122,7 @@ export const translations = {
     shareViaEmail: '通过邮件分享',
     copyLink: '复制链接',
     emailSubject: '来听听这首AI歌曲',
-    emailBody: '嘿！\n\n我创作了这首AI生成的歌曲，觉得你会喜欢：\n\n《{title}》- {creator}\n{style}\n\n点击收听：{url}\n\n使用 ACE-Step UI 制作 - 免费开源的本地AI音乐生成工具！',
+    emailBody: '嘿！\n\n我创作了这首AI生成的歌曲，觉得你会喜欢：\n\n《{title}》- {creator}\n{style}\n\n点击收听：{url}\n\n使用 ACEStudio 制作 - 免费开源的本地AI音乐生成工具！',
     
     // Reference Modal
     referenceModalTitle: '参考音频',
@@ -1217,7 +1231,7 @@ export const translations = {
     settings: '設定',
     
     // Username Modal
-    welcomeTitle: 'ACE-Step UIへようこそ',
+    welcomeTitle: 'ACEStudioへようこそ',
     welcomeSubtitle: 'AI音楽作成を始めるために名前を入力してください',
     yourName: 'お名前',
     enterYourName: '名前を入力',
@@ -1241,7 +1255,7 @@ export const translations = {
     failedToDeleteSong: '曲の削除に失敗しました',
     
     // Sidebar
-    aceStepUI: 'ACE-Step UI',
+    aceStepUI: 'ACEStudio',
     collapseSidebar: 'サイドバーを折りたたむ',
     expandSidebar: 'サイドバーを展開',
 
@@ -1278,6 +1292,13 @@ export const translations = {
     version: 'バージョン',
     localAIMusicGenerator: 'ローカルAI音楽ジェネレーター',
     poweredBy: 'ACE-Step 1.5を搭載。オープンソースで無料で使用できます。',
+    studioDescription: 'ACE-Step 1.5 のワークフロー向けにカスタマイズしたローカル優先の音楽スタジオUIです。生成、歌詞、映像ビジュアル、ライブラリ再生に重点を置いています。',
+    studioCustomization: 'スタジオカスタマイズ',
+    studioCustomizationDescription: 'ローカルUI/UXの方向性、ワークフロー調整、ACEStudioのカスタマイズ。',
+    studioRepo: 'Studio リポジトリ',
+    originalProject: 'オリジナルプロジェクト',
+    originalProjectDescription: 'オリジナルの ACE-Step UI プロジェクトをベースに、ACE-Step 1.5 で動作します。',
+    originalRepo: 'オリジナルリポジトリ',
     createdBy: '開発者 Ambsd',
     localizedBy: 'ローカライゼーション＆二次開発 bdsqlsz',
     follow: 'フォロー',
@@ -1707,7 +1728,7 @@ export const translations = {
     shareViaEmail: 'メールで共有',
     copyLink: 'リンクをコピー',
     emailSubject: 'このAI曲をチェックしてください',
-    emailBody: 'こんにちは！\n\n私がこのAI生成の曲を作りました。気に入ってもらえると思います：\n\n「{title}」by {creator}\n{style}\n\nここで聴いてください：{url}\n\nACE-Step UIで作成 - 無料でオープンソースのローカルAI音楽生成！',
+    emailBody: 'こんにちは！\n\n私がこのAI生成の曲を作りました。気に入ってもらえると思います：\n\n「{title}」by {creator}\n{style}\n\nここで聴いてください：{url}\n\nACEStudioで作成 - 無料でオープンソースのローカルAI音楽生成！',
     
     // Reference Modal
     referenceModalTitle: 'リファレンス',
@@ -1816,7 +1837,7 @@ export const translations = {
     settings: '설정',
     
     // Username Modal
-    welcomeTitle: 'ACE-Step UI에 오신 것을 환영합니다',
+    welcomeTitle: 'ACEStudio에 오신 것을 환영합니다',
     welcomeSubtitle: 'AI 음악 제작을 시작하려면 이름을 입력하세요',
     yourName: '이름',
     enterYourName: '이름 입력',
@@ -1840,7 +1861,7 @@ export const translations = {
     failedToDeleteSong: '곡 삭제에 실패했습니다',
     
     // Sidebar
-    aceStepUI: 'ACE-Step UI',
+    aceStepUI: 'ACEStudio',
     collapseSidebar: '사이드바 접기',
     expandSidebar: '사이드바 펼치기',
 
@@ -1877,6 +1898,13 @@ export const translations = {
     version: '버전',
     localAIMusicGenerator: '로컬 AI 음악 생성기',
     poweredBy: 'ACE-Step 1.5 기반. 오픈 소스이며 무료로 사용 가능합니다.',
+    studioDescription: 'ACE-Step 1.5 워크플로를 위해 맞춤화된 로컬 우선 음악 스튜디오 UI입니다. 생성, 가사, 영상 비주얼, 라이브러리 재생에 집중합니다.',
+    studioCustomization: '스튜디오 커스터마이징',
+    studioCustomizationDescription: '로컬 UI/UX 방향, 워크플로 튜닝, ACEStudio 커스터마이징.',
+    studioRepo: 'Studio 저장소',
+    originalProject: '원본 프로젝트',
+    originalProjectDescription: '원본 ACE-Step UI 프로젝트를 기반으로 하며 ACE-Step 1.5로 구동됩니다.',
+    originalRepo: '원본 저장소',
     createdBy: '개발자 Ambsd',
     localizedBy: '현지화 및 2차 개발 bdsqlsz',
     follow: '팔로우',
@@ -2306,7 +2334,7 @@ export const translations = {
     shareViaEmail: '이메일로 공유',
     copyLink: '링크 복사',
     emailSubject: '이 AI 곡을 들어보세요',
-    emailBody: '안녕하세요!\n\n제가 만든 이 AI 생성 곡을 들어보세요. 마음에 드실 거예요:\n\n"{title}" - {creator}\n{style}\n\n여기서 들으세요: {url}\n\nACE-Step UI로 제작 - 무료 오픈 소스 로컬 AI 음악 생성!',
+    emailBody: '안녕하세요!\n\n제가 만든 이 AI 생성 곡을 들어보세요. 마음에 드실 거예요:\n\n"{title}" - {creator}\n{style}\n\n여기서 들으세요: {url}\n\nACEStudio로 제작 - 무료 오픈 소스 로컬 AI 음악 생성!',
     
     // Reference Modal
     referenceModalTitle: '참조 음악',

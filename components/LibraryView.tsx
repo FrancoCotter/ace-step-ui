@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Music, Play, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Heart, Plus, Music, Play, Pause, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { ShareModal } from './ShareModal';
@@ -20,6 +20,8 @@ interface LibraryViewProps {
   onReusePrompt?: (song: Song) => void;
   onDeleteSong?: (song: Song) => void;
   onDeleteReferenceTrack?: (trackId: string) => void;
+  currentSong?: Song | null;
+  isPlaying?: boolean;
 }
 
 interface ReferenceTrack {
@@ -46,12 +48,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     onReusePrompt,
     onDeleteSong,
     onDeleteReferenceTrack,
+    currentSong,
+    isPlaying = false,
 }) => {
     const { t } = useI18n();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'all' | 'playlists' | 'liked' | 'uploads'>('all');
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [shareSong, setShareSong] = useState<Song | null>(null);
+
+    const isSongPlaying = (song: Song) => currentSong?.id === song.id && isPlaying;
+
+    const playIconForSong = (song: Song, size = 14) => (
+        isSongPlaying(song)
+            ? <Pause size={size} fill="currentColor" />
+            : <Play size={size} fill="currentColor" />
+    );
 
     const formatBytes = (bytes?: number | null) => {
         if (!bytes || bytes <= 0) return '0 B';
@@ -118,9 +130,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                         <div className="text-sm text-zinc-500 dark:text-zinc-400">No songs yet.</div>
                     ) : (
                         allSongs.map((song, idx) => (
-                            <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors" onClick={() => onPlaySong(song, allSongs)}>
+                            <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors">
                                 <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
-                                <span className="text-zinc-900 dark:text-white w-6 text-center hidden group-hover:block"><Play size={14} fill="currentColor" /></span>
+                                <button
+                                    type="button"
+                                    aria-label={isSongPlaying(song) ? `Pause ${song.title}` : `Play ${song.title}`}
+                                    className="hidden group-hover:flex w-6 h-6 items-center justify-center rounded-full text-zinc-900 hover:bg-zinc-200 dark:text-white dark:hover:bg-white/10 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPlaySong(song, allSongs);
+                                    }}
+                                >
+                                    {playIconForSong(song)}
+                                </button>
                                 
                                 {song.coverUrl ? (
                                     <img src={song.coverUrl} className="w-10 h-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -165,8 +187,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              )}
              {activeTab === 'liked' && (
                  <div>
-                    <div className="bg-gradient-to-b from-indigo-500/10 to-zinc-50 dark:from-indigo-800/50 dark:to-zinc-900/50 p-6 rounded-xl flex items-end gap-6 mb-8 cursor-pointer hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors group border border-zinc-200 dark:border-white/5" onClick={() => likedSongs.length > 0 && onPlaySong(likedSongs[0], likedSongs)}>
-                         <div className="w-40 h-40 bg-gradient-to-br from-indigo-500 to-purple-400 rounded shadow-2xl flex items-center justify-center">
+                    <div className="bg-gradient-to-b from-[#9bb89d]/10 to-zinc-50 dark:from-[#6f8f72]/35 dark:to-zinc-900/50 p-6 rounded-xl flex items-end gap-6 mb-8 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors group border border-zinc-200 dark:border-white/5">
+                         <div className="w-40 h-40 bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] rounded shadow-2xl flex items-center justify-center">
                             <Heart fill="white" size={64} className="text-white" />
                          </div>
                          <div className="mb-2">
@@ -177,17 +199,39 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                              </div>
                          </div>
                          <div className="ml-auto mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-                                <Play fill="black" className="text-black ml-1" size={28} />
-                             </div>
+                             <button
+                                type="button"
+                                disabled={likedSongs.length === 0}
+                                aria-label={likedSongs[0] && isSongPlaying(likedSongs[0]) ? 'Pause liked songs' : 'Play liked songs'}
+                                className="w-14 h-14 rounded-full bg-green-500 disabled:bg-zinc-500 disabled:cursor-not-allowed flex items-center justify-center shadow-lg hover:scale-105 transition-transform text-black"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (likedSongs.length > 0) onPlaySong(likedSongs[0], likedSongs);
+                                }}
+                             >
+                                {likedSongs[0] && isSongPlaying(likedSongs[0])
+                                    ? <Pause fill="currentColor" size={28} />
+                                    : <Play fill="currentColor" className="ml-1" size={28} />
+                                }
+                             </button>
                          </div>
                     </div>
 
                     <div className="space-y-1">
                         {likedSongs.map((song, idx) => (
-                            <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors" onClick={() => onPlaySong(song, likedSongs)}>
+                            <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors">
                                 <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
-                                <span className="text-zinc-900 dark:text-white w-6 text-center hidden group-hover:block"><Play size={14} fill="currentColor" /></span>
+                                <button
+                                    type="button"
+                                    aria-label={isSongPlaying(song) ? `Pause ${song.title}` : `Play ${song.title}`}
+                                    className="hidden group-hover:flex w-6 h-6 items-center justify-center rounded-full text-zinc-900 hover:bg-zinc-200 dark:text-white dark:hover:bg-white/10 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPlaySong(song, likedSongs);
+                                    }}
+                                >
+                                    {playIconForSong(song)}
+                                </button>
                                 
                                 {song.coverUrl ? (
                                     <img src={song.coverUrl} className="w-10 h-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />

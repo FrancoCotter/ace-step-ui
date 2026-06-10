@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, User, Sparkles } from 'lucide-react';
+import { X, User } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { BrandMark } from './BrandMark';
 
 interface UsernameModalProps {
   isOpen: boolean;
@@ -48,13 +49,13 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onSubmit }
       {/* Modal */}
       <div className="relative w-full max-w-md bg-zinc-900 rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
         {/* Header gradient */}
-        <div className="h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
+        <div className="h-2 bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)]" />
 
         <div className="p-8">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 rounded-2xl bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] text-[#132018] flex items-center justify-center shadow-lg">
+              <BrandMark className="w-9 h-9" />
             </div>
           </div>
 
@@ -82,7 +83,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onSubmit }
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={t('enterYourName')}
-                  className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#8fb68f] focus:border-transparent transition-all"
                   autoFocus
                   disabled={isLoading}
                 />
@@ -95,7 +96,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onSubmit }
             <button
               type="submit"
               disabled={isLoading || !username.trim()}
-              className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-semibold rounded-xl hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full py-3 bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] text-[#132018] font-semibold rounded-xl hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">

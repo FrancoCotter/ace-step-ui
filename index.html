@@ -1,63 +1,23 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ACE-Step UI - Local AI Music Generator</title>
-
+    <title>ACEStudio - Local AI Music Generator</title>
     <!-- Primary Meta Tags -->
-    <meta name="title" content="ACE-Step UI - Local AI Music Generator" />
-    <meta name="description" content="Create AI music locally with ACE-Step UI. Free and open source music generation powered by ACE-Step 1.5." />
+    <meta name="title" content="ACEStudio - Local AI Music Generator" />
+    <meta name="description" content="Create AI music locally with ACEStudio. Free and open source music generation powered by ACE-Step 1.5." />
     <meta name="keywords" content="AI music generator, ACE-Step, local AI, music generation, text to music, AI song generator" />
     <meta name="robots" content="index, follow" />
-    <meta name="author" content="ACE-Step UI" />
-
+    <meta name="author" content="ACEStudio" />
     <!-- Additional SEO -->
     <meta name="theme-color" content="#ec4899" />
-    <meta name="application-name" content="ACE-Step UI" />
-    <meta name="apple-mobile-web-app-title" content="ACE-Step UI" />
-
+    <meta name="application-name" content="ACEStudio" />
+    <meta name="apple-mobile-web-app-title" content="ACEStudio" />
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              suno: {
-                DEFAULT: '#09090b',
-                sidebar: '#000000',
-                panel: '#121214',
-                card: '#18181b',
-                hover: '#27272a',
-                border: '#27272a',
-              }
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
-            animation: {
-              'gradient-x': 'gradient-x 15s ease infinite',
-            },
-            keyframes: {
-              'gradient-x': {
-                '0%, 100%': {
-                  'background-size': '200% 200%',
-                  'background-position': 'left center'
-                },
-                '50%': {
-                  'background-size': '200% 200%',
-                  'background-position': 'right center'
-                },
-              },
-            }
-          }
-        }
-      }
-    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -257,7 +217,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-suno text-zinc-900 dark:text-white overflow-hidden transition-colors duration-300">
     <div id="root"></div>

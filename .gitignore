@@ -25,7 +25,11 @@ server/data/*.db-wal
 server/public/audio/*.mp3
 server/public/audio/*.flac
 server/public/audio/*.wav
+server/public/audio/*.lrc
 server/public/audio/*/
+server/public/covers/*.jpg
+server/public/covers/*.png
+server/public/covers/*/
 !server/public/audio/.gitkeep
 
 # Reference tracks (user uploads)

@@ -39,6 +39,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [titleDraft, setTitleDraft] = useState('');
     const [titleError, setTitleError] = useState<string | null>(null);
     const [isSavingTitle, setIsSavingTitle] = useState(false);
+    const [now, setNow] = useState(() => Date.now());
+    const displayViewCount = song
+        ? song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0
+        : 0;
 
     useEffect(() => {
         if (song) {
@@ -54,6 +58,27 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
             setIsSavingTitle(false);
         }
     }, [song?.id]);
+
+    useEffect(() => {
+        if (!song?.isGenerating) return;
+        setNow(Date.now());
+        const interval = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(interval);
+    }, [song?.id, song?.isGenerating]);
+
+    const formatElapsedTime = (start: Date): string => {
+        const elapsedSec = Math.max(0, Math.floor((now - start.getTime()) / 1000));
+        const minutes = Math.floor(elapsedSec / 60);
+        const seconds = elapsedSec % 60;
+        return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    };
+
+    const getGenerationStatusText = (): string => {
+        if (!song) return '';
+        if (song.queuePosition) return `Queued #${song.queuePosition}`;
+        const stage = song.stage?.trim() || 'Starting generation...';
+        return `${stage} · ${formatElapsedTime(song.createdAt)}`;
+    };
 
     const startTitleEdit = () => {
         if (!song || !isOwner) return;
@@ -126,8 +151,83 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
         </div>
     );
 
+    if (song.isGenerating) {
+        return (
+            <div className="w-full h-full bg-zinc-50 dark:bg-suno-panel flex flex-col border-l border-zinc-200 dark:border-white/5 relative transition-colors duration-300">
+                <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-white/5 flex-shrink-0 bg-zinc-50/50 dark:bg-suno-panel/50 backdrop-blur-md z-10">
+                    <span className="font-semibold text-sm text-zinc-900 dark:text-white">{t('songDetails')}</span>
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded-full text-zinc-500 dark:text-zinc-400 transition-colors"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="p-5 pb-24 lg:pb-32 space-y-6">
+                        <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-zinc-200 dark:bg-zinc-800 shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
+                            {song.coverUrl ? (
+                                <img
+                                    src={song.coverUrl}
+                                    alt={song.title}
+                                    className="h-full w-full object-cover opacity-45 blur-md scale-110"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                            ) : (
+                                <AlbumCover seed={song.id || song.title} size="full" className="h-full w-full opacity-45 blur-md scale-110" />
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="flex items-end gap-1.5 rounded-full bg-black/25 px-5 py-4 backdrop-blur-md">
+                                    <span className="h-8 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '0ms' }} />
+                                    <span className="h-12 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '120ms' }} />
+                                    <span className="h-6 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '240ms' }} />
+                                    <span className="h-10 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '360ms' }} />
+                                </div>
+                            </div>
+                            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-white/75">
+                                    {getGenerationStatusText()}
+                                </span>
+                                <span className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-black backdrop-blur-sm">
+                                    {song.queuePosition ? `#${song.queuePosition}` : formatElapsedTime(song.createdAt)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white leading-tight tracking-tight">
+                                    {song.title || 'Generating...'}
+                                </h2>
+                                {song.style && (
+                                    <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                        {song.style}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white dark:ring-black overflow-hidden">
+                                    <img src={getAvatarUrl(song.creator_avatar, song.creator)} alt={song.creator || t('anonymous')} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-semibold text-zinc-900 dark:text-white">
+                                        {song.creator || t('anonymous')}
+                                    </span>
+                                    <p className="text-xs text-zinc-500">{t('created')} {new Date(song.createdAt).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="w-full h-full bg-zinc-50 dark:bg-suno-panel flex flex-col border-l border-zinc-200 dark:border-white/5 relative transition-colors duration-300">
+        <div key={song.id} className="w-full h-full bg-zinc-50 dark:bg-suno-panel flex flex-col border-l border-zinc-200 dark:border-white/5 relative transition-all duration-300 animate-in fade-in zoom-in-95">
 
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-white/5 flex-shrink-0 bg-zinc-50/50 dark:bg-suno-panel/50 backdrop-blur-md z-10">
@@ -176,7 +276,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
                             <div className="flex items-center gap-2 text-white">
                                 <Play size={16} fill="currentColor" />
-                                <span className="text-xs font-bold font-mono">{song.viewCount || 0}</span>
+                                <span className="text-xs font-bold font-mono">{displayViewCount}</span>
                             </div>
                             <span className="text-[10px] font-bold text-black bg-white/90 px-1.5 py-0.5 rounded backdrop-blur-sm">
                                 {song.duration}
@@ -189,10 +289,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         <div className="flex justify-between items-start gap-2">
                             <div className="flex items-center gap-2 flex-1">
                                 {!isEditingTitle ? (
-                                    <h2
-                                        onClick={() => onNavigateToSong?.(song.id)}
-                                        className="text-2xl font-bold text-zinc-900 dark:text-white leading-tight tracking-tight cursor-pointer hover:underline"
-                                    >
+                                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white leading-tight tracking-tight">
                                         {song.title}
                                     </h2>
                                 ) : (
@@ -210,7 +307,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                                     cancelTitleEdit();
                                                 }
                                             }}
-                                            className="w-full text-xl font-bold text-zinc-900 dark:text-white bg-white dark:bg-black/30 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500/40"
+                                            className="w-full text-xl font-bold text-zinc-900 dark:text-white bg-white dark:bg-black/30 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#8fb68f]/40"
                                             maxLength={120}
                                             autoFocus
                                         />
@@ -218,7 +315,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                             <button
                                                 onClick={() => void saveTitleEdit()}
                                                 disabled={isSavingTitle}
-                                                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-pink-600 text-white hover:bg-pink-700 disabled:opacity-60"
+                                                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-[#8fb68f] text-[#132018] hover:brightness-110 disabled:opacity-60"
                                             >
                                                 {isSavingTitle ? t('saving') : t('save')}
                                             </button>
@@ -550,7 +647,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
 const ActionButton: React.FC<{ icon: React.ReactNode; label?: string; active?: boolean; onClick?: () => void }> = ({ icon, label, active, onClick }) => (
     <button
         onClick={onClick}
-        className={`flex items-center gap-1.5 ${active ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400'} hover:text-black dark:hover:text-white transition-colors`}
+        className={`flex items-center gap-1.5 ${active ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400'} hover:text-black dark:hover:text-white transition-colors`}
     >
         {icon}
         {label && <span className="text-xs font-semibold">{label}</span>}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Song } from '../types';
-import { songsApi, getAudioUrl } from '../services/api';
+import { songsApi, getAudioUrl, getCoverUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { ArrowLeft, Heart, Share2, MoreHorizontal, ThumbsDown, Music as MusicIcon, Edit3, Eye, Quote } from 'lucide-react';
@@ -26,6 +26,7 @@ interface SongProfileProps {
 interface SyncedLyricLine {
     time: number;
     endTime?: number;
+    hasExplicitEnd?: boolean;
     text: string;
 }
 
@@ -34,6 +35,7 @@ function cleanLyricText(text: string): string {
         .split('\n')
         .map(line => line
             .replace(/\[(?:intro|verse|pre[-\s]?chorus|chorus|bridge|outro|hook|refrain|interlude|guitar|breakdown|drop|build|solo|spoken|fade|final(?:\s+chorus)?|post[-\s]?chorus|prelude|ending|song\s+ends?)[^\]]*\]/gi, '')
+            .replace(/\[[^\]]+\]/g, '')
             .trim()
         )
         .filter(Boolean)
@@ -72,12 +74,7 @@ function parseLrcText(lrc: string): SyncedLyricLine[] {
         });
     });
 
-    return lines
-        .sort((a, b) => a.time - b.time)
-        .map((line, index, sorted) => ({
-            ...line,
-            endTime: sorted[index + 1]?.time,
-        }));
+    return lines.sort((a, b) => a.time - b.time);
 }
 
 function vttTimeToSeconds(time: string): number {
@@ -111,11 +108,19 @@ function parseSyncedLyrics(raw: string): SyncedLyricLine[] {
         lines.push({
             time: vttTimeToSeconds(start),
             endTime: end ? vttTimeToSeconds(end) : undefined,
+            hasExplicitEnd: Boolean(end),
             text,
         });
     });
 
     return lines.sort((a, b) => a.time - b.time);
+}
+
+function getActiveSyncedLyricIndex(lines: SyncedLyricLine[], time: number): number {
+    return lines.findIndex((line, index) => {
+        const endTime = line.hasExplicitEnd ? line.endTime : lines[index + 1]?.time;
+        return time >= line.time && (!endTime || time < endTime);
+    });
 }
 
 function parseGenerationParams(value: unknown): any {
@@ -130,8 +135,8 @@ function parseGenerationParams(value: unknown): any {
 const updateMetaTags = (song: Song) => {
     const baseUrl = window.location.origin;
     const songUrl = `${baseUrl}/song/${song.id}`;
-    const title = `${song.title} by ${song.creator || 'Unknown Artist'} | ACE-Step UI`;
-    const description = `Listen to "${song.title}" - ${song.style}. ${song.viewCount || 0} plays, ${song.likeCount || 0} likes. Create your own AI music with ACE-Step UI.`;
+    const title = `${song.title} by ${song.creator || 'Unknown Artist'} | ACEStudio`;
+    const description = `Listen to "${song.title}" - ${song.style}. ${song.viewCount || 0} plays, ${song.likeCount || 0} likes. Create your own AI music with ACEStudio.`;
 
     document.title = title;
 
@@ -171,8 +176,8 @@ const updateMetaTags = (song: Song) => {
 };
 
 const resetMetaTags = () => {
-    document.title = 'ACE-Step UI - Local AI Music Generator';
-    const defaultDescription = 'Create original music with AI locally. Generate songs in any style with custom lyrics and professional quality using ACE-Step.';
+    document.title = 'ACEStudio - Local AI Music Generator';
+    const defaultDescription = 'Create original music with AI locally. Generate songs in any style with custom lyrics and professional quality using ACEStudio.';
     const defaultImage = '/og-image.png';
 
     const updateMeta = (selector: string, content: string) => {
@@ -181,11 +186,11 @@ const resetMetaTags = () => {
     };
 
     updateMeta('meta[name="description"]', defaultDescription);
-    updateMeta('meta[property="og:title"]', 'ACE-Step UI - Local AI Music Generator');
+    updateMeta('meta[property="og:title"]', 'ACEStudio - Local AI Music Generator');
     updateMeta('meta[property="og:description"]', defaultDescription);
     updateMeta('meta[property="og:image"]', defaultImage);
     updateMeta('meta[property="og:type"]', 'website');
-    updateMeta('meta[name="twitter:title"]', 'ACE-Step UI - Local AI Music Generator');
+    updateMeta('meta[name="twitter:title"]', 'ACEStudio - Local AI Music Generator');
     updateMeta('meta[name="twitter:description"]', defaultDescription);
     updateMeta('meta[name="twitter:image"]', defaultImage);
 };
@@ -197,22 +202,26 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
     const [loading, setLoading] = useState(!initialSong);
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
-    const [showLyricsPanel, setShowLyricsPanel] = useState(false);
+    const [lyricsPanelRequested, setLyricsPanelRequested] = useState(() => {
+        return localStorage.getItem('acestep_song_profile_lyrics_open') === 'true';
+    });
     const [syncedLyrics, setSyncedLyrics] = useState<SyncedLyricLine[]>([]);
+    const [syncedLyricsLoading, setSyncedLyricsLoading] = useState(false);
     const lyricLineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
     const isCurrentSong = song && currentSong?.id === song.id;
     const isCurrentlyPlaying = isCurrentSong && isPlaying;
     const isLiked = song ? likedSongIds.has(song.id) : false;
     const playbackTime = isCurrentSong ? currentTime : 0;
-    const shouldLoadSyncedLyrics = Boolean(song?.generationParams?.getLrc);
-    const hasRenderableLyrics = Boolean(song?.lyrics?.trim()) || syncedLyrics.length > 0;
+    const shouldLoadSyncedLyrics = Boolean(song?.audioUrl);
+    const staticLyricsText = useMemo(() => {
+        return song?.lyrics ? formatDisplayLyricText(cleanLyricText(song.lyrics)) : '';
+    }, [song?.lyrics]);
+    const hasRenderableLyrics = Boolean(staticLyricsText.trim()) || syncedLyrics.length > 0;
+    const showLyricsPanel = lyricsPanelRequested && hasRenderableLyrics;
     const activeLyricIndex = useMemo(() => {
         if (!syncedLyrics.length) return -1;
-        return syncedLyrics.findIndex((line, index) => {
-            const endTime = line.endTime ?? syncedLyrics[index + 1]?.time;
-            return playbackTime >= line.time && (!endTime || playbackTime < endTime);
-        });
+        return getActiveSyncedLyricIndex(syncedLyrics, playbackTime);
     }, [playbackTime, syncedLyrics]);
 
     useEffect(() => {
@@ -221,12 +230,15 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
             setSong(initialSong);
         }
         loadSongData(songId, () => cancelled);
-        setShowLyricsPanel(false);
         return () => {
             cancelled = true;
             resetMetaTags();
         };
     }, [songId, initialSong]);
+
+    useEffect(() => {
+        localStorage.setItem('acestep_song_profile_lyrics_open', lyricsPanelRequested ? 'true' : 'false');
+    }, [lyricsPanelRequested]);
 
     useEffect(() => {
         if (song) {
@@ -245,7 +257,7 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                 title: response.song.title,
                 lyrics: response.song.lyrics,
                 style: response.song.style,
-                coverUrl: `https://picsum.photos/seed/${response.song.id}/400/400`,
+                coverUrl: getCoverUrl(response.song.cover_url || response.song.coverUrl, response.song.id),
                 duration: response.song.duration
                     ? `${Math.floor(response.song.duration / 60)}:${String(Math.floor(response.song.duration % 60)).padStart(2, '0')}`
                     : '0:00',
@@ -273,11 +285,14 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
     useEffect(() => {
         if (!song?.audioUrl || !shouldLoadSyncedLyrics) {
             setSyncedLyrics([]);
+            setSyncedLyricsLoading(false);
             return;
         }
 
         let cancelled = false;
         const lrcUrl = song.audioUrl.replace(/\.[^/.]+$/, '.lrc');
+        setSyncedLyrics([]);
+        setSyncedLyricsLoading(true);
 
         fetch(lrcUrl)
             .then(response => {
@@ -290,6 +305,9 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
             })
             .catch(() => {
                 if (!cancelled) setSyncedLyrics([]);
+            })
+            .finally(() => {
+                if (!cancelled) setSyncedLyricsLoading(false);
             });
 
         return () => {
@@ -397,10 +415,10 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                 <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
                                 {isCurrentlyPlaying && (
                                     <div className="absolute bottom-4 left-4 flex items-center gap-1">
-                                        <span className="w-1.5 h-4 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
-                                        <span className="w-1.5 h-6 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                                        <span className="w-1.5 h-3 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                                        <span className="w-1.5 h-7 bg-pink-500 rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
+                                        <span className="w-1.5 h-4 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                                        <span className="w-1.5 h-6 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                        <span className="w-1.5 h-3 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                        <span className="w-1.5 h-7 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
                                     </div>
                                 )}
                             </div>
@@ -408,7 +426,7 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                             {hasRenderableLyrics && (
                                 <div className="flex justify-center lg:justify-start">
                                     <button
-                                        onClick={() => setShowLyricsPanel(prev => !prev)}
+                                        onClick={() => setLyricsPanelRequested(prev => !prev)}
                                         className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
                                             showLyricsPanel
                                                 ? 'bg-white text-black dark:bg-white dark:text-black'
@@ -431,7 +449,7 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                 </div>
                                 <button
                                     onClick={() => onToggleLike?.(song.id)}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${isLiked ? 'bg-pink-500 text-white' : 'bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white'}`}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${isLiked ? 'bg-[#8fb68f] text-[#132018]' : 'bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white'}`}
                                 >
                                     <Heart size={16} className={isLiked ? 'fill-current' : ''} />
                                     <span className="font-semibold">{song.likeCount || 0}</span>
@@ -479,7 +497,7 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                         </div>
 
                         {showLyricsPanel && (
-                        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 md:p-6 min-h-[22rem] lg:min-h-[28rem]">
+                        <div className="song-lyrics-panel-enter bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 md:p-6 min-h-[22rem] lg:min-h-[28rem]">
                             {syncedLyrics.length > 0 ? (
                                 <div className="max-h-[32rem] overflow-y-auto px-2 md:px-4 pr-5 md:pr-7">
                                     <div className="space-y-5 py-5">
@@ -501,7 +519,7 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                                     ref={element => {
                                                         lyricLineRefs.current[index] = element;
                                                     }}
-                                                    className={`max-w-full whitespace-normal break-words rounded-lg py-1 text-2xl md:text-[1.7rem] font-bold leading-snug transition-colors duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-pink-500/50 ${
+                                                    className={`max-w-full whitespace-normal break-words rounded-lg py-1 text-2xl md:text-[1.7rem] font-bold leading-snug transition-colors duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#8fb68f]/50 ${
                                                         isActive
                                                             ? 'text-zinc-950 dark:text-white'
                                                             : isPast
@@ -515,11 +533,16 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                         })}
                                     </div>
                                 </div>
+                            ) : shouldLoadSyncedLyrics && syncedLyricsLoading ? (
+                                <div className="h-64 flex flex-col items-center justify-center text-center text-zinc-400 dark:text-zinc-600">
+                                    <div className="w-4 h-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin mb-3" />
+                                    <span className="text-sm">Loading synced lyrics...</span>
+                                </div>
                             ) : song.lyrics ? (
                                 <>
                                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-white mb-4">Lyrics</h3>
                                 <div className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 whitespace-pre-line leading-relaxed max-h-[32rem] overflow-y-auto pr-2">
-                                    {formatDisplayLyricText(cleanLyricText(song.lyrics))}
+                                    {staticLyricsText}
                                 </div>
                                 </>
                             ) : (
