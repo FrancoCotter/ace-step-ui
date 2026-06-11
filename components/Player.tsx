@@ -856,7 +856,40 @@ export const Player: React.FC<PlayerProps> = ({
         const container = fullscreenLyricsRef.current;
         if (!container) return;
         beginFullscreenLyricsBrowse();
-        container.scrollTop += deltaY * 0.35;
+        const resistedDelta = Math.sign(deltaY) * Math.min(Math.abs(deltaY), 72) * 0.22;
+        container.scrollTop += resistedDelta;
+    };
+
+    const getWheelDeltaY = (event: React.WheelEvent<HTMLDivElement>): number => {
+        const deltaUnit = event.deltaMode === 1
+            ? 16
+            : event.deltaMode === 2
+                ? fullscreenLyricsRef.current?.clientHeight ?? 280
+                : 1;
+        return event.deltaY * deltaUnit;
+    };
+
+    const getFullscreenLyricStyle = (index: number, isActive: boolean): React.CSSProperties => {
+        if (isBrowsingFullscreenLyrics || isActive || activeLyricIndex < 0) {
+            return {
+                color: isActive ? 'var(--lyrics-color-active)' : 'var(--lyrics-color-inactive)',
+                filter: 'blur(0px)',
+                opacity: isActive ? 1 : 0.76,
+                transform: 'scale(1)',
+            };
+        }
+
+        const distance = Math.min(Math.abs(index - activeLyricIndex), 5);
+        const blurByDistance = [0, 0.7, 2.1, 4.2, 6.5, 8.5];
+        const opacityByDistance = [1, 0.74, 0.58, 0.42, 0.3, 0.22];
+        const scaleByDistance = [1, 0.985, 0.97, 0.955, 0.94, 0.925];
+
+        return {
+            color: 'var(--lyrics-color-inactive)',
+            filter: `blur(${blurByDistance[distance]}px)`,
+            opacity: opacityByDistance[distance],
+            transform: `scale(${scaleByDistance[distance]})`,
+        };
     };
 
     const progressPercent = duration ? (currentTime / duration) * 100 : 0;
@@ -1205,12 +1238,14 @@ export const Player: React.FC<PlayerProps> = ({
                                 </div>
                             </div>
                         ) : hasDynamicLyrics ? (
-                            <div className="mx-auto flex h-[58vh] max-w-6xl items-center justify-center overflow-hidden py-10">
+                            <div className={`mx-auto flex max-w-6xl items-center justify-center overflow-hidden transition-[height,padding] duration-500 ${
+                                isBrowsingFullscreenLyrics ? 'h-[68vh] py-4' : 'h-[58vh] py-10'
+                            }`}>
                                 <div
                                     ref={fullscreenLyricsRef}
                                     onWheel={(event) => {
                                         event.preventDefault();
-                                        scrollFullscreenLyricsBy(event.deltaY);
+                                        scrollFullscreenLyricsBy(getWheelDeltaY(event));
                                     }}
                                     onTouchStart={(event) => {
                                         lastTouchY.current = event.touches[0]?.clientY ?? null;
@@ -1226,29 +1261,30 @@ export const Player: React.FC<PlayerProps> = ({
                                     onTouchEnd={() => {
                                         lastTouchY.current = null;
                                     }}
-                                    onMouseDown={beginFullscreenLyricsBrowse}
                                     className={`w-full max-h-full text-center custom-scrollbar transition-[overflow] ${
                                         isBrowsingFullscreenLyrics ? 'overflow-y-auto' : 'overflow-hidden'
                                     }`}
                                 >
-                                    <div className="flex flex-col items-center justify-center gap-6 py-[24vh]">
+                                    <div className={`flex flex-col items-center justify-center transition-[gap,padding] duration-500 ${
+                                        isBrowsingFullscreenLyrics ? 'gap-4 py-[30vh]' : 'gap-6 py-[24vh]'
+                                    }`}>
                                         {syncedLyrics.map((line, index) => {
                                             const isActive = index === activeLyricIndex;
+                                            const lyricStyle = getFullscreenLyricStyle(index, isActive);
                                             return (
                                                 <button
                                                     key={`${line.time}-${line.text}`}
                                                     type="button"
                                                     data-lyric-index={index}
                                                     onClick={() => {
-                                                        beginFullscreenLyricsBrowse();
                                                         onSeek(line.time);
                                                     }}
                                                     title={`Jump to ${formatTime(line.time)}`}
-                                                    style={!isActive ? { color: 'var(--lyrics-color-inactive)' } : { color: 'var(--lyrics-color-active)' }}
-                                                    className={`mx-auto block w-full max-w-5xl break-words rounded-xl px-8 py-1 text-center text-3xl xl:text-5xl font-bold leading-[1.16] tracking-normal transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                                                    style={lyricStyle}
+                                                    className={`mx-auto block w-full max-w-5xl break-words rounded-xl px-8 py-1 text-center text-3xl xl:text-5xl font-bold leading-[1.16] tracking-normal transition-[color,opacity,filter,transform] duration-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                                                         isActive
-                                                            ? 'opacity-100'
-                                                            : 'opacity-70 hover:!text-white hover:opacity-100'
+                                                            ? ''
+                                                            : 'hover:!text-white'
                                                     }`}
                                                 >
                                                     {line.text}
