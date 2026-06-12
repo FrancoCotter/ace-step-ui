@@ -22,6 +22,13 @@ interface SyncedLyricLine {
     endTime?: number;
     hasExplicitEnd?: boolean;
     text: string;
+    syllables?: SyncedLyricSyllable[];
+}
+
+interface SyncedLyricSyllable {
+    time: number;
+    endTime?: number;
+    text: string;
 }
 
 interface PlayerProps {
@@ -591,8 +598,33 @@ function formatDisplayLyricText(text: string): string {
 }
 
 function parseTimestamp(timestamp: string): number {
-    const [minutes, seconds] = timestamp.split(':');
+    const [minutes, ...rest] = timestamp.split(':');
+    const seconds = rest.join(':').replace(':', '.');
     return (parseInt(minutes, 10) || 0) * 60 + (parseFloat(seconds) || 0);
+}
+
+function stripInlineLyricTimestamps(text: string): string {
+    return text.replace(/<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>/g, '');
+}
+
+function parseInlineLyricSyllables(text: string): SyncedLyricSyllable[] {
+    const markers = [...text.matchAll(/<(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)>/g)];
+    if (markers.length < 2) return [];
+
+    return markers
+        .map((marker, index) => {
+            const markerEnd = (marker.index ?? 0) + marker[0].length;
+            const nextMarker = markers[index + 1];
+            const rawText = text.slice(markerEnd, nextMarker?.index ?? text.length);
+            const syllableText = formatDisplayLyricText(cleanLyricText(stripInlineLyricTimestamps(rawText)));
+            if (!syllableText) return null;
+            return {
+                time: parseTimestamp(marker[1]),
+                endTime: nextMarker ? parseTimestamp(nextMarker[1]) : undefined,
+                text: syllableText,
+            };
+        })
+        .filter((syllable): syllable is SyncedLyricSyllable => Boolean(syllable));
 }
 
 function vttTimeToSeconds(time: string): number {
@@ -611,11 +643,17 @@ function parseSyncedLyrics(raw: string): SyncedLyricLine[] {
     if (!raw.trim().startsWith('WEBVTT') && !raw.includes('-->')) {
         const lines: SyncedLyricLine[] = [];
         raw.split('\n').forEach(rawLine => {
-            const matches = [...rawLine.matchAll(/\[(\d{2}:\d{2}(?:\.\d{1,3})?)\]/g)];
+            const matches = [...rawLine.matchAll(/\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/g)];
             if (matches.length === 0) return;
-            const lyricText = formatDisplayLyricText(cleanLyricText(rawLine.replace(/\[(\d{2}:\d{2}(?:\.\d{1,3})?)\]/g, '')));
+            const content = rawLine.replace(/\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/g, '');
+            const lyricText = formatDisplayLyricText(cleanLyricText(stripInlineLyricTimestamps(content)));
             if (!lyricText) return;
-            matches.forEach(match => lines.push({ time: parseTimestamp(match[1]), text: lyricText }));
+            const syllables = parseInlineLyricSyllables(content);
+            matches.forEach(match => lines.push({
+                time: parseTimestamp(match[1]),
+                text: lyricText,
+                syllables: syllables.length ? syllables : undefined,
+            }));
         });
         return lines.sort((a, b) => a.time - b.time);
     }
@@ -890,6 +928,36 @@ export const Player: React.FC<PlayerProps> = ({
             opacity: opacityByDistance[distance],
             transform: `scale(${scaleByDistance[distance]})`,
         };
+    };
+
+    const renderFullscreenLyricText = (line: SyncedLyricLine, isActive: boolean) => {
+        if (!isActive || !line.syllables?.length) return line.text;
+
+        return line.syllables.map((syllable, index) => {
+            const nextTime = line.syllables?.[index + 1]?.time;
+            const syllableEnd = syllable.endTime ?? nextTime ?? line.endTime ?? line.time + 0.45;
+            const progress = Math.max(0, Math.min(1, (currentTime - syllable.time) / Math.max(syllableEnd - syllable.time, 0.08)));
+            const isCurrent = currentTime >= syllable.time && currentTime < syllableEnd;
+            const isPlayed = currentTime >= syllableEnd;
+            const opacity = isPlayed ? 1 : isCurrent ? 0.9 + progress * 0.1 : 0.48;
+            const scale = isCurrent ? 1 + Math.sin(progress * Math.PI) * 0.055 : 1;
+
+            return (
+                <span
+                    key={`${syllable.time}-${index}-${syllable.text}`}
+                    className="inline-block transition-[color,opacity,filter,transform,text-shadow] duration-200"
+                    style={{
+                        color: isPlayed || isCurrent ? 'var(--lyrics-color-active)' : 'var(--lyrics-color-inactive)',
+                        opacity,
+                        transform: `translateY(${isCurrent ? -2 * Math.sin(progress * Math.PI) : 0}px) scale(${scale})`,
+                        filter: isCurrent ? 'brightness(1.16)' : 'none',
+                        textShadow: isCurrent ? '0 0 22px rgba(255,255,255,0.34)' : 'none',
+                    }}
+                >
+                    {syllable.text}
+                </span>
+            );
+        });
     };
 
     const progressPercent = duration ? (currentTime / duration) * 100 : 0;
@@ -1287,7 +1355,7 @@ export const Player: React.FC<PlayerProps> = ({
                                                             : 'hover:!text-white'
                                                     }`}
                                                 >
-                                                    {line.text}
+                                                    {renderFullscreenLyricText(line, isActive)}
                                                 </button>
                                             );
                                         })}

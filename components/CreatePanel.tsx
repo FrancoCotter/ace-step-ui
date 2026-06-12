@@ -258,6 +258,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [allowLmBatch, setAllowLmBatch] = useState(true);
   const [getScores, setGetScores] = useState(false);
   const [getLrc, setGetLrc] = useState(false);
+  const [isLoadingRandomExample, setIsLoadingRandomExample] = useState(false);
   const [scoreScale, setScoreScale] = useState(0.5);
   const [lmBatchChunkSize, setLmBatchChunkSize] = useState(8);
   const [trackName, setTrackName] = useState('');
@@ -817,6 +818,50 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     e.target.value = '';
   };
 
+  const handleLoadRandomExample = async (mode: 'simple' | 'custom') => {
+    if (!token || isLoadingRandomExample) return;
+    setIsLoadingRandomExample(true);
+    try {
+      const result = await generateApi.getRandomDescription(token, mode);
+
+      if (mode === 'simple') {
+        setSongDescription(result.description || result.caption || '');
+        setInstrumental(result.instrumental);
+        setBpm(0);
+        setDuration(-1);
+        setKeyScale('');
+        setTimeSignature('');
+        setThinking(false);
+      } else {
+        setStyle(result.caption || '');
+        setLyrics(normalizeLyricsInput(result.lyrics || ''));
+        setInstrumental(!(result.lyrics || '').trim());
+        setThinking(Boolean(result.think));
+      }
+
+      setVocalLanguage(result.vocalLanguage || 'unknown');
+      if (typeof result.bpm === 'number') setBpm(result.bpm);
+      if (typeof result.duration === 'number') setDuration(result.duration);
+      if (result.keyScale !== undefined) setKeyScale(result.keyScale);
+      if (result.timeSignature !== undefined) setTimeSignature(result.timeSignature);
+      refreshMusicTags();
+    } catch (err) {
+      console.error('Failed to load random example:', err);
+    } finally {
+      setIsLoadingRandomExample(false);
+    }
+  };
+
+  const switchToSimpleMode = () => {
+    setCustomMode(false);
+    setShowAdvanced(false);
+    setBpm(0);
+    setDuration(-1);
+    setKeyScale('');
+    setTimeSignature('');
+    setThinking(false);
+  };
+
   // Format handler - uses LLM to enhance style/lyrics and auto-fill parameters
   const handleFormat = async (target: 'style' | 'lyrics') => {
     if (!token || !style.trim()) return;
@@ -1109,6 +1154,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       const trimmed = style.trim();
       return trimmed ? `${trimmed}\n${genderHint}` : genderHint;
     })();
+    const submissionLyrics = customMode ? normalizedLyrics : '';
+    const submissionStyle = customMode ? styleWithGender : '';
+    const submissionInstrumental = customMode ? instrumental : true;
 
     // Bulk generation: loop bulkCount times
     for (let i = 0; i < bulkCount; i++) {
@@ -1124,12 +1172,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       onGenerate({
         customMode,
         songDescription: customMode ? undefined : songDescription,
-        prompt: normalizedLyrics,
-        lyrics: normalizedLyrics,
-        style: styleWithGender,
+        prompt: submissionLyrics,
+        lyrics: submissionLyrics,
+        style: submissionStyle,
         title: bulkCount > 1 ? `${title} (${i + 1})` : title,
         ditModel: selectedModel,
-        instrumental,
+        instrumental: submissionInstrumental,
         vocalLanguage,
         bpm,
         keyScale,
@@ -1279,7 +1327,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
             {/* Mode Toggle */}
             <div className="flex items-center bg-zinc-200 dark:bg-black/40 rounded-lg p-1 border border-zinc-300 dark:border-white/5">
               <button
-                onClick={() => setCustomMode(false)}
+                onClick={switchToSimpleMode}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${!customMode ? 'bg-white dark:bg-zinc-800 text-black dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
               >
                 {t('simple')}
@@ -1420,24 +1468,25 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                 <span className="text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   {t('describeYourSong')}
                 </span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!token) return;
-                    try {
-                      const result = await generateApi.getRandomDescription(token);
-                      setSongDescription(result.description);
-                      setInstrumental(result.instrumental);
-                      setVocalLanguage(result.vocalLanguage || 'unknown');
-                    } catch (err) {
-                      console.error('Failed to load random description:', err);
-                    }
-                  }}
-                  title="Load random description"
-                  className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors"
-                >
-                  <Dices size={14} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleLoadRandomExample('simple')}
+                    disabled={isLoadingRandomExample}
+                    title="Load random description"
+                    className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors"
+                  >
+                    {isLoadingRandomExample ? <Loader2 size={14} className="animate-spin" /> : <Dices size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSongDescription('')}
+                    title="Clear description"
+                    className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
               <textarea
                 value={songDescription}
@@ -1524,7 +1573,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('key')}</label>
                   <select
                     value={keyScale}
-                    onChange={setKeyScale}
+                    onChange={(e) => setKeyScale(e.target.value)}
                     className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-xl px-2 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-[#8fb68f] dark:focus:border-[#8fb68f] transition-colors cursor-pointer [&>option]:bg-white [&>option]:dark:bg-zinc-800 [&>option]:text-zinc-900 [&>option]:dark:text-white"
                   >
                     <option value="">Auto</option>
@@ -1537,7 +1586,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('time')}</label>
                   <select
                     value={timeSignature}
-                    onChange={setTimeSignature}
+                    onChange={(e) => setTimeSignature(e.target.value)}
                     className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-xl px-2 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-[#8fb68f] dark:focus:border-[#8fb68f] transition-colors cursor-pointer [&>option]:bg-white [&>option]:dark:bg-zinc-800 [&>option]:text-zinc-900 [&>option]:dark:text-white"
                   >
                     <option value="">Auto</option>
@@ -1773,6 +1822,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    className={`p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded transition-colors ${isLoadingRandomExample ? 'text-[#8fb68f]' : 'text-zinc-500 hover:text-black dark:hover:text-white'}`}
+                    title="Load random text-to-music example"
+                    onClick={() => handleLoadRandomExample('custom')}
+                    disabled={isLoadingRandomExample || isFormattingLyrics}
+                  >
+                    {isLoadingRandomExample ? <Loader2 size={14} className="animate-spin" /> : <Dices size={14} />}
+                  </button>
+                  <button
                     onClick={() => setInstrumental(!instrumental)}
                     className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
                       instrumental
@@ -1845,7 +1902,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     className="p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded transition-colors text-zinc-500 hover:text-black dark:hover:text-white"
                     title={t('refreshGenres')}
                     onClick={refreshMusicTags}
-                    disabled={isFormattingStyle}
+                    disabled={isLoadingRandomExample || isFormattingStyle}
                   >
                     <Dices size={14} />
                   </button>
@@ -2117,18 +2174,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         </div>
 
         {/* ADVANCED SETTINGS */}
-        <button
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-white dark:bg-suno-card rounded-xl border border-zinc-200 dark:border-white/5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Settings2 size={16} className="text-zinc-500" />
-            <span>{t('advancedSettings')}</span>
-          </div>
-          <ChevronDown size={16} className={`text-zinc-500 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-        </button>
+        {customMode && (
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-white dark:bg-suno-card rounded-xl border border-zinc-200 dark:border-white/5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 size={16} className="text-zinc-500" />
+              <span>{t('advancedSettings')}</span>
+            </div>
+            <ChevronDown size={16} className={`text-zinc-500 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+          </button>
+        )}
 
-        {showAdvanced && (
+        {customMode && showAdvanced && (
           <div className="bg-white dark:bg-suno-card rounded-xl border border-zinc-200 dark:border-white/5 p-4 space-y-4">
             {/* Load Parameters from JSON */}
             <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-zinc-300 dark:border-white/15 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-white/5 cursor-pointer transition-colors">

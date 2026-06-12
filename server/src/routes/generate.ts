@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { readFile } from 'fs/promises';
+import { readdir, readFile } from 'fs/promises';
 import { pool } from '../db/pool.js';
 import { generateUUID } from '../db/sqlite.js';
 import { config } from '../config/index.js';
@@ -26,6 +26,51 @@ import type { StorageProvider } from '../services/storage/index.js';
 // process.env.ACESTEP_PATH = 'D:\\ACE1.5';
 // process.env.PYTHON_PATH = 'D:\\ACE1.5\\.venv\\Scripts\\python.exe';
 const router = Router();
+
+type ExampleMode = 'simple' | 'custom';
+
+type LocalExample = {
+  description?: string;
+  think?: boolean;
+  instrumental?: boolean;
+  vocal_language?: string;
+  caption?: string;
+  lyrics?: string;
+  bpm?: number;
+  duration?: number;
+  keyscale?: string;
+  language?: string;
+  timesignature?: string;
+};
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function loadRandomLocalExample(mode: ExampleMode): Promise<LocalExample | null> {
+  const folderName = mode === 'simple' ? 'simple_mode' : 'text2music';
+  const examplesRoots = [
+    path.resolve(process.cwd(), '../examples'),
+    path.resolve(process.cwd(), 'examples'),
+    path.resolve(__dirname, '../../../examples'),
+    path.resolve(__dirname, '../../examples'),
+  ];
+
+  for (const root of examplesRoots) {
+    try {
+      const examplesDir = path.join(root, folderName);
+      const files = (await readdir(examplesDir)).filter(file => file.endsWith('.json'));
+      if (files.length === 0) continue;
+
+      const file = files[Math.floor(Math.random() * files.length)];
+      const raw = await readFile(path.join(examplesDir, file), 'utf8');
+      return JSON.parse(raw) as LocalExample;
+    } catch {
+      // Try the next likely examples root.
+    }
+  }
+
+  return null;
+}
 
 // Auto-generate a song title from lyrics or style when none is provided
 function autoTitle(params: { title?: string; lyrics?: string; instrumental?: boolean; style?: string; songDescription?: string }): string {
@@ -339,24 +384,25 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       return;
     }
 
+    const isCustomMode = Boolean(customMode);
     const params = {
       customMode,
       songDescription,
-      lyrics,
-      style,
+      lyrics: isCustomMode ? lyrics : '',
+      style: isCustomMode ? style : '',
       title,
-      instrumental,
-      vocalLanguage,
-      duration,
-      bpm,
-      keyScale,
-      timeSignature,
+      instrumental: isCustomMode ? instrumental : true,
+      vocalLanguage: isCustomMode ? vocalLanguage : 'unknown',
+      duration: isCustomMode ? duration : -1,
+      bpm: isCustomMode ? bpm : 0,
+      keyScale: isCustomMode ? keyScale : '',
+      timeSignature: isCustomMode ? timeSignature : '',
       inferenceSteps,
       guidanceScale,
       batchSize,
       randomSeed,
       seed,
-      thinking,
+      thinking: isCustomMode ? thinking : false,
       audioFormat,
       inferMethod,
       shift,
@@ -778,9 +824,33 @@ router.get('/models', async (_req, res: Response) => {
   }
 });
 
-// GET /api/generate/random-description — Load a random simple description from Gradio
-router.get('/random-description', authMiddleware, async (_req: AuthenticatedRequest, res: Response) => {
+// GET /api/generate/random-description — Load a random example from local examples, with Gradio fallback for legacy simple mode.
+router.get('/random-description', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const mode: ExampleMode = req.query.mode === 'custom' ? 'custom' : 'simple';
+    const localExample = await loadRandomLocalExample(mode);
+
+    if (localExample) {
+      res.json({
+        description: localExample.description || '',
+        think: localExample.think,
+        instrumental: localExample.instrumental ?? !localExample.lyrics,
+        vocalLanguage: localExample.vocal_language || localExample.language || 'unknown',
+        caption: localExample.caption || '',
+        lyrics: localExample.lyrics || '',
+        bpm: localExample.bpm,
+        duration: localExample.duration,
+        keyScale: localExample.keyscale || '',
+        timeSignature: localExample.timesignature || '',
+      });
+      return;
+    }
+
+    if (mode === 'custom') {
+      res.status(404).json({ error: 'No local text2music examples found' });
+      return;
+    }
+
     const client = await getGradioClient();
     const result = await client.predict('/load_random_simple_description', []);
     const data = result.data as unknown[];

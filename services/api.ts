@@ -425,12 +425,19 @@ export const generateApi = {
     error?: string;
   }> => api('/api/generate/format', { method: 'POST', body: params, token }),
 
-  // Random description from Gradio's example library
-  getRandomDescription: (token: string): Promise<{
+  // Random example from local ACE-Step examples, with server-side Gradio fallback for legacy simple mode.
+  getRandomDescription: (token: string, mode: 'simple' | 'custom' = 'simple'): Promise<{
     description: string;
+    think?: boolean;
     instrumental: boolean;
     vocalLanguage: string;
-  }> => api('/api/generate/random-description', { token }),
+    caption?: string;
+    lyrics?: string;
+    bpm?: number;
+    duration?: number;
+    keyScale?: string;
+    timeSignature?: string;
+  }> => api(`/api/generate/random-description?mode=${mode}`, { token }),
 
   // LoRA Inference (requires ACE-Step training fork)
   loadLora: (params: {
