@@ -8,6 +8,7 @@ import { ShareModal } from './ShareModal';
 import { AlbumCover } from './AlbumCover';
 import { songsApi } from '../services/api';
 import { getAvatarUrl } from '../utils/avatar';
+import { getSongTags } from '../utils/songMetadata';
 
 interface SongListProps {
     songs: Song[];
@@ -281,12 +282,14 @@ export const SongList: React.FC<SongListProps> = ({
     };
 
     const filteredSongs = useMemo(() => {
+        const normalizedQuery = searchQuery.toLowerCase();
         return songs.filter(song => {
+            const songTags = getSongTags(song);
             // 1. Search Logic
             const matchesSearch =
-                song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                song.style.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                song.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+                (song.title || '').toLowerCase().includes(normalizedQuery) ||
+                (song.style || '').toLowerCase().includes(normalizedQuery) ||
+                songTags.some(tag => tag.toLowerCase().includes(normalizedQuery));
 
             if (!matchesSearch) return false;
 

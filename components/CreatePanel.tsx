@@ -145,6 +145,11 @@ type CreatePanelDraft = {
   vocalGender?: 'male' | 'female' | '';
 };
 
+type CustomExampleSnapshot = {
+  lyrics: string;
+  style: string;
+};
+
 let createPanelDraftMemory: CreatePanelDraft = {};
 
 const readCreatePanelDraft = (): CreatePanelDraft => {
@@ -191,6 +196,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [lyrics, setLyrics] = useState(() => normalizeLyricsInput(initialDraft.lyrics || ''));
   const [style, setStyle] = useState(() => initialDraft.style || '');
   const [title, setTitle] = useState(() => initialDraft.title || '');
+  const [customExampleSnapshot, setCustomExampleSnapshot] = useState<CustomExampleSnapshot | null>(null);
 
   // Common
   const [instrumental, setInstrumental] = useState(() => initialDraft.instrumental ?? false);
@@ -564,6 +570,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
+        setCustomExampleSnapshot(null);
         if (data.lyrics !== undefined) setLyrics(normalizeLyricsInput(String(data.lyrics)));
         if (data.style !== undefined) setStyle(data.style);
         if (data.title !== undefined) setTitle(data.title);
@@ -607,6 +614,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       setStyle(initialData.song.style);
       setTitle(initialData.song.title);
       setInstrumental(initialData.song.lyrics.length === 0);
+      setCustomExampleSnapshot(null);
     }
   }, [initialData]);
 
@@ -832,11 +840,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         setKeyScale('');
         setTimeSignature('');
         setThinking(false);
+        setCustomExampleSnapshot(null);
       } else {
-        setStyle(result.caption || '');
-        setLyrics(normalizeLyricsInput(result.lyrics || ''));
+        const nextStyle = result.caption || '';
+        const nextLyrics = normalizeLyricsInput(result.lyrics || '');
+        setStyle(nextStyle);
+        setLyrics(nextLyrics);
         setInstrumental(!(result.lyrics || '').trim());
         setThinking(Boolean(result.think));
+        setCustomExampleSnapshot({ lyrics: nextLyrics, style: nextStyle });
       }
 
       setVocalLanguage(result.vocalLanguage || 'unknown');
@@ -852,6 +864,35 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     }
   };
 
+  const resetCustomExampleParams = () => {
+    setBpm(0);
+    setDuration(-1);
+    setKeyScale('');
+    setTimeSignature('');
+    setThinking(false);
+    setCustomExampleSnapshot(null);
+  };
+
+  const detachCustomExampleIfContentChanged = (nextLyrics: string, nextStyle: string) => {
+    if (
+      customExampleSnapshot &&
+      (nextLyrics !== customExampleSnapshot.lyrics || nextStyle !== customExampleSnapshot.style)
+    ) {
+      resetCustomExampleParams();
+    }
+  };
+
+  const handleLyricsChange = (value: string) => {
+    const nextLyrics = normalizeLyricsInput(value);
+    setLyrics(nextLyrics);
+    detachCustomExampleIfContentChanged(nextLyrics, style);
+  };
+
+  const handleStyleChange = (value: string) => {
+    setStyle(value);
+    detachCustomExampleIfContentChanged(lyrics, value);
+  };
+
   const switchToSimpleMode = () => {
     setCustomMode(false);
     setShowAdvanced(false);
@@ -860,6 +901,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     setKeyScale('');
     setTimeSignature('');
     setThinking(false);
+    setCustomExampleSnapshot(null);
   };
 
   // Format handler - uses LLM to enhance style/lyrics and auto-fill parameters
@@ -887,6 +929,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
 
       if (result.caption || result.lyrics || result.bpm || result.duration) {
         // Update fields with LLM-generated values
+        setCustomExampleSnapshot(null);
         if (target === 'style' && result.caption) setStyle(result.caption);
         if (target === 'lyrics' && result.lyrics) setLyrics(normalizeLyricsInput(result.lyrics));
         if (result.bpm && result.bpm > 0) setBpm(result.bpm);
@@ -996,8 +1039,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         throw new Error('Failed to transcribe');
       }
       const data = await response.json();
-      if (data.lyrics) {
-        setLyrics(prev => prev || normalizeLyricsInput(data.lyrics));
+      if (data.lyrics && !lyrics) {
+        setCustomExampleSnapshot(null);
+        setLyrics(normalizeLyricsInput(data.lyrics));
       }
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -1849,7 +1893,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   </button>
                   <button
                     className="p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded text-zinc-500 hover:text-black dark:hover:text-white transition-colors"
-                    onClick={() => setLyrics('')}
+                    onClick={() => handleLyricsChange('')}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -1858,7 +1902,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               <textarea
                 disabled={instrumental || isFormattingLyrics}
                 value={lyrics}
-                onChange={(e) => setLyrics(normalizeLyricsInput(e.target.value))}
+                onChange={(e) => handleLyricsChange(e.target.value)}
                 placeholder={instrumental ? t('instrumental') + ' mode' : t('lyricsPlaceholder')}
                 className={`w-full bg-transparent p-3 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none resize-none font-mono leading-relaxed ${instrumental ? 'opacity-30 cursor-not-allowed' : ''} ${isFormattingLyrics ? 'cursor-not-allowed' : ''}`}
                 style={{ height: `${lyricsHeight}px` }}
@@ -1908,7 +1952,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   </button>
                   <button
                     className="p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded text-zinc-500 hover:text-black dark:hover:text-white transition-colors"
-                    onClick={() => setStyle('')}
+                    onClick={() => handleStyleChange('')}
                     disabled={isFormattingStyle}
                   >
                     <Trash2 size={14} />
@@ -1925,7 +1969,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               </div>
               <textarea
                 value={style}
-                onChange={(e) => setStyle(e.target.value)}
+                onChange={(e) => handleStyleChange(e.target.value)}
                 disabled={isFormattingStyle}
                 placeholder={t('stylePlaceholder')}
                 className={`w-full h-20 bg-transparent p-3 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none resize-none ${isFormattingStyle ? 'cursor-not-allowed' : ''}`}
@@ -1936,7 +1980,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   {musicTags.map(tag => (
                     <button
                       key={tag}
-                      onClick={() => setStyle(prev => prev ? `${prev}, ${tag}` : tag)}
+                      onClick={() => handleStyleChange(style ? `${style}, ${tag}` : tag)}
                       disabled={isFormattingStyle}
                       className="text-[10px] font-medium bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white px-2.5 py-1 rounded-full transition-colors border border-zinc-200 dark:border-white/5"
                     >

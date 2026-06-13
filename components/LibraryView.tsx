@@ -57,12 +57,66 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [shareSong, setShareSong] = useState<Song | null>(null);
 
+    const completedAllSongs = allSongs.filter(song => !song.isGenerating && Boolean(song.audioUrl));
+    const completedLikedSongs = likedSongs.filter(song => !song.isGenerating && Boolean(song.audioUrl));
     const isSongPlaying = (song: Song) => currentSong?.id === song.id && isPlaying;
 
     const playIconForSong = (song: Song, size = 14) => (
         isSongPlaying(song)
             ? <Pause size={size} fill="currentColor" />
             : <Play size={size} fill="currentColor" />
+    );
+
+    const seededValue = (seed: string, offset: number) => {
+        let hash = 2166136261 + offset * 374761393;
+        for (let i = 0; i < seed.length; i += 1) {
+            hash ^= seed.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return ((hash >>> 0) % 1000) / 1000;
+    };
+
+    const playingIndicator = (song: Song) => (
+        <div className="flex h-5 w-6 items-end justify-center gap-[2px] text-[#1ed760] group-hover:hidden" aria-label="Now playing">
+            {Array.from({ length: 5 }, (_, index) => {
+                const seed = `${song.id}-${song.title}`;
+                const height = 0.72 + seededValue(seed, index) * 0.55;
+                const duration = 0.58 + seededValue(seed, index + 11) * 0.34;
+                const delay = -seededValue(seed, index + 23) * duration;
+                return (
+                    <span
+                        key={index}
+                        className="w-[2px] bg-current music-bar-anim"
+                        style={{
+                            '--music-bar-max': `${height.toFixed(2)}rem`,
+                            animationDuration: `${duration.toFixed(2)}s`,
+                            animationDelay: `${delay.toFixed(2)}s`,
+                        } as React.CSSProperties}
+                    />
+                );
+            })}
+        </div>
+    );
+
+    const rowLeadingControl = (song: Song, index: number, list: Song[]) => (
+        <>
+            {isSongPlaying(song) ? (
+                playingIndicator(song)
+            ) : (
+                <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{index + 1}</span>
+            )}
+            <button
+                type="button"
+                aria-label={isSongPlaying(song) ? `Pause ${song.title}` : `Play ${song.title}`}
+                className="hidden group-hover:flex w-6 h-6 items-center justify-center rounded-full text-zinc-900 hover:bg-zinc-200 dark:text-white dark:hover:bg-white/10 transition-colors"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onPlaySong(song, list);
+                }}
+            >
+                {playIconForSong(song)}
+            </button>
+        </>
     );
 
     const formatBytes = (bytes?: number | null) => {
@@ -126,23 +180,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              {/* Content */}
              {activeTab === 'all' && (
                  <div className="space-y-1">
-                    {allSongs.length === 0 ? (
+                    {completedAllSongs.length === 0 ? (
                         <div className="text-sm text-zinc-500 dark:text-zinc-400">No songs yet.</div>
                     ) : (
-                        allSongs.map((song, idx) => (
+                        completedAllSongs.map((song, idx) => (
                             <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors">
-                                <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
-                                <button
-                                    type="button"
-                                    aria-label={isSongPlaying(song) ? `Pause ${song.title}` : `Play ${song.title}`}
-                                    className="hidden group-hover:flex w-6 h-6 items-center justify-center rounded-full text-zinc-900 hover:bg-zinc-200 dark:text-white dark:hover:bg-white/10 transition-colors"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onPlaySong(song, allSongs);
-                                    }}
-                                >
-                                    {playIconForSong(song)}
-                                </button>
+                                {rowLeadingControl(song, idx, completedAllSongs)}
                                 
                                 {song.coverUrl ? (
                                     <img src={song.coverUrl} className="w-10 h-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -195,21 +238,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                              <h2 className="text-sm font-bold uppercase text-zinc-500 dark:text-white mb-2">{t('playlist')}</h2>
                              <h1 className="text-5xl font-extrabold text-zinc-900 dark:text-white mb-4">{t('likedSongs')}</h1>
                              <div className="text-sm text-zinc-500 dark:text-zinc-300 font-medium">
-                                 {likedSongs.length} {t('songs')}
+                                 {completedLikedSongs.length} {t('songs')}
                              </div>
                          </div>
                          <div className="ml-auto mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
                              <button
                                 type="button"
-                                disabled={likedSongs.length === 0}
-                                aria-label={likedSongs[0] && isSongPlaying(likedSongs[0]) ? 'Pause liked songs' : 'Play liked songs'}
+                                disabled={completedLikedSongs.length === 0}
+                                aria-label={completedLikedSongs[0] && isSongPlaying(completedLikedSongs[0]) ? 'Pause liked songs' : 'Play liked songs'}
                                 className="w-14 h-14 rounded-full bg-green-500 disabled:bg-zinc-500 disabled:cursor-not-allowed flex items-center justify-center shadow-lg hover:scale-105 transition-transform text-black"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (likedSongs.length > 0) onPlaySong(likedSongs[0], likedSongs);
+                                    if (completedLikedSongs.length > 0) onPlaySong(completedLikedSongs[0], completedLikedSongs);
                                 }}
                              >
-                                {likedSongs[0] && isSongPlaying(likedSongs[0])
+                                {completedLikedSongs[0] && isSongPlaying(completedLikedSongs[0])
                                     ? <Pause fill="currentColor" size={28} />
                                     : <Play fill="currentColor" className="ml-1" size={28} />
                                 }
@@ -218,20 +261,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                        {likedSongs.map((song, idx) => (
+                        {completedLikedSongs.map((song, idx) => (
                             <div key={song.id} className="group flex items-center gap-4 p-2 rounded hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors">
-                                <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
-                                <button
-                                    type="button"
-                                    aria-label={isSongPlaying(song) ? `Pause ${song.title}` : `Play ${song.title}`}
-                                    className="hidden group-hover:flex w-6 h-6 items-center justify-center rounded-full text-zinc-900 hover:bg-zinc-200 dark:text-white dark:hover:bg-white/10 transition-colors"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onPlaySong(song, likedSongs);
-                                    }}
-                                >
-                                    {playIconForSong(song)}
-                                </button>
+                                {rowLeadingControl(song, idx, completedLikedSongs)}
                                 
                                 {song.coverUrl ? (
                                     <img src={song.coverUrl} className="w-10 h-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />

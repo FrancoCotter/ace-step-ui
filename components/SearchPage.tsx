@@ -5,6 +5,7 @@ import { songsApi, usersApi, playlistsApi, searchApi, UserProfile, getAudioUrl, 
 import { useI18n } from '../context/I18nContext';
 import { GENRE_KEYS } from '../data/genres';
 import { getAvatarUrl } from '../utils/avatar';
+import { getSongCaption, getSongTags } from '../utils/songMetadata';
 import { AlbumCover } from './AlbumCover';
 
 interface SearchPageProps {
@@ -73,6 +74,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [copiedTag, setCopiedTag] = useState<string | null>(null);
+  const [featuredSongPage, setFeaturedSongPage] = useState(0);
 
   const songsScrollRef = useRef<HTMLDivElement>(null);
   const creatorsScrollRef = useRef<HTMLDivElement>(null);
@@ -125,6 +127,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       if (songsRes.status === 'fulfilled') {
         const songs = songsRes.value.songs.map(transformSong);
         setFeaturedSongs(shuffleArray(songs).slice(0, MAX_RESULTS));
+        setFeaturedSongPage(0);
       }
 
       if (creatorsRes.status === 'fulfilled' && creatorsRes.value.creators?.length > 0) {
@@ -226,6 +229,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const displayCreators = searchResults?.creators || featuredCreators;
   const displayPlaylists = searchResults?.playlists || featuredPlaylists;
   const isSearching = searchQuery.trim().length > 0;
+  const featuredSongsPerPage = 8;
+  const featuredSongPageCount = Math.max(1, Math.ceil(displaySongs.length / featuredSongsPerPage));
+  const visibleSongs = isSearching
+    ? displaySongs.slice(0, MAX_RESULTS)
+    : displaySongs.slice(featuredSongPage * featuredSongsPerPage, (featuredSongPage + 1) * featuredSongsPerPage);
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-[#0a0a0a] h-full overflow-y-auto custom-scrollbar">
@@ -263,13 +271,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 <span className="ml-2 text-sm font-normal text-zinc-500">({displaySongs.length})</span>
               )}
             </h2>
-            {!isSearching && displaySongs.length > 4 && (
-              <button
-                onClick={() => scroll(songsScrollRef, 'right')}
-                className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-white/5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-              >
-                <ChevronRight size={20} />
-              </button>
+            {!isSearching && displaySongs.length > featuredSongsPerPage && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setFeaturedSongPage(page => (page - 1 + featuredSongPageCount) % featuredSongPageCount)}
+                  className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-white/5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                  aria-label="Previous featured songs"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  onClick={() => setFeaturedSongPage(page => (page + 1) % featuredSongPageCount)}
+                  className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-white/5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                  aria-label="Next featured songs"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
             )}
           </div>
 
@@ -289,7 +307,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 : "grid grid-cols-2 lg:grid-cols-4 gap-3 auto-rows-max"
               }
             >
-              {displaySongs.slice(0, isSearching ? MAX_RESULTS : 8).map((song) => (
+              {visibleSongs.map((song) => (
                 <FeaturedSongCard
                   key={song.id}
                   song={song}
@@ -483,7 +501,8 @@ const FeaturedSongCard: React.FC<FeaturedSongCardProps> = ({
   formatNumber,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const tags = song.style?.split(',').map(t => t.trim()).filter(Boolean).slice(0, 2) || [];
+  const tags = getSongTags(song).slice(0, 2);
+  const caption = getSongCaption(song);
   const modelId = getSongModelId(song);
 
   return (
@@ -520,16 +539,20 @@ const FeaturedSongCard: React.FC<FeaturedSongCardProps> = ({
           )}
         </div>
         <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mb-1">
-          {tags.map((tag, i) => (
-            <button
-              key={i}
-              onClick={(e) => { e.stopPropagation(); onCopyTag(tag); }}
-              className="hover:text-[#6f8f72] dark:hover:text-[#a8c9a4] transition-colors"
-            >
-              {tag}{i < tags.length - 1 ? ', ' : ''}
-              {copiedTag === tag && <Check size={10} className="inline ml-0.5 text-green-500" />}
-            </button>
-          ))}
+          {tags.length > 0 ? (
+            tags.map((tag, i) => (
+              <button
+                key={tag}
+                onClick={(e) => { e.stopPropagation(); onCopyTag(tag); }}
+                className="hover:text-[#6f8f72] dark:hover:text-[#a8c9a4] transition-colors"
+              >
+                {tag}{i < tags.length - 1 ? ', ' : ''}
+                {copiedTag === tag && <Check size={10} className="inline ml-0.5 text-green-500" />}
+              </button>
+            ))
+          ) : (
+            caption
+          )}
         </div>
         <div className="flex items-center gap-2 text-[10px] text-zinc-400">
           {song.creator && (

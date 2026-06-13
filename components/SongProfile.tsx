@@ -7,6 +7,7 @@ import { ArrowLeft, Heart, Share2, MoreHorizontal, ThumbsDown, Music as MusicIco
 import { ShareModal } from './ShareModal';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { getAvatarUrl } from '../utils/avatar';
+import { getSongCaption, getSongTags } from '../utils/songMetadata';
 
 interface SongProfileProps {
     songId: string;
@@ -345,6 +346,9 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
         );
     }
 
+    const songCaption = getSongCaption(song);
+    const displayTags = getSongTags(song);
+
     return (
         <div className={`w-full h-full flex flex-col bg-zinc-50 dark:bg-black overflow-hidden transition-opacity duration-200 ${loading ? 'opacity-100' : 'opacity-100'}`}>
             {/* Header */}
@@ -372,14 +376,21 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                             </div>
                         </div>
 
-                        {/* Tags */}
-                        <div className="flex flex-wrap gap-2 mb-2">
-                            {song.style.split(',').slice(0, 4).map((tag, i) => (
-                                <span key={i} className="px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded text-xs text-zinc-600 dark:text-zinc-300">
-                                    {tag.trim()}
-                                </span>
-                            ))}
-                        </div>
+                        {songCaption && (
+                            <p className="mb-2 max-w-5xl truncate text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                                {songCaption}
+                            </p>
+                        )}
+
+                        {displayTags.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {displayTags.slice(0, 8).map(tag => (
+                                    <span key={tag} className="px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded text-xs text-zinc-600 dark:text-zinc-300">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
                         <div className="text-xs text-zinc-500">
                             {new Date(song.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {new Date(song.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}

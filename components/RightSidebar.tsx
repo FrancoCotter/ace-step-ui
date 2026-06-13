@@ -8,6 +8,7 @@ import { SongDropdownMenu } from './SongDropdownMenu';
 import { ShareModal } from './ShareModal';
 import { AlbumCover } from './AlbumCover';
 import { getAvatarUrl } from '../utils/avatar';
+import { getSongCaption, getSongTags } from '../utils/songMetadata';
 
 interface RightSidebarProps {
     song: Song | null;
@@ -32,6 +33,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [showMenu, setShowMenu] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
     const [tagsExpanded, setTagsExpanded] = useState(false);
+    const [captionExpanded, setCaptionExpanded] = useState(false);
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [copiedStyle, setCopiedStyle] = useState(false);
     const [copiedLyrics, setCopiedLyrics] = useState(false);
@@ -43,6 +45,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const displayViewCount = song
         ? song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0
         : 0;
+    const songCaption = song ? getSongCaption(song) : '';
+    const displayTags = song ? getSongTags(song) : [];
+    const canExpandCaption = songCaption.length > 140;
 
     useEffect(() => {
         if (song) {
@@ -56,6 +61,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
             setIsEditingTitle(false);
             setTitleError(null);
             setIsSavingTitle(false);
+            setCaptionExpanded(false);
+            setTagsExpanded(false);
         }
     }, [song?.id]);
 
@@ -551,7 +558,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
 
                     <div className="h-px bg-zinc-200 dark:bg-white/5 w-full"></div>
 
-                    {/* Tags / Style */}
+                    {/* Caption / Tags */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wide">{t('songDetails')}</h2>
@@ -559,46 +566,75 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                        const allTags = Array.isArray(song.tags) && song.tags.length > 0
-                                            ? song.tags.join(', ')
-                                            : (song.style ?? '');
-                                        if (!allTags) return;
-                                        await navigator.clipboard.writeText(allTags);
+                                        const copyText = songCaption || displayTags.join(', ');
+                                        if (!copyText) return;
+                                        await navigator.clipboard.writeText(copyText);
                                         setCopiedStyle(true);
                                         setTimeout(() => setCopiedStyle(false), 2000);
                                     } catch (error) {
-                                        console.error('Failed to copy style tags:', error);
+                                        console.error('Failed to copy song caption:', error);
                                     }
                                 }}
                                 className={`relative z-10 flex items-center gap-1 text-[10px] font-medium transition-colors cursor-pointer ${copiedStyle ? 'text-green-500' : 'text-zinc-500 hover:text-black dark:hover:text-white'}`}
-                                title={t('copyAllTags')}
+                                title="Copy song details"
                             >
                                 <Copy size={12} /> {copiedStyle ? t('copied') : t('copy')}
                             </button>
                         </div>
-                        <div
-                            onClick={() => setTagsExpanded(!tagsExpanded)}
-                            className={`flex flex-wrap gap-1.5 cursor-pointer relative ${!tagsExpanded ? 'max-h-[22px] overflow-hidden' : ''}`}
-                        >
-                            {Array.isArray(song.tags) && song.tags.length > 0 ? (
-                                song.tags.map(tag => (
-                                    <span key={tag} className="px-2 py-0.5 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 border border-zinc-200 dark:border-white/10 rounded text-[11px] font-medium text-zinc-600 dark:text-zinc-300 transition-colors">
-                                        {tag}
-                                    </span>
-                                ))
-                            ) : (
-                                (song.style || '').split(',').filter(Boolean).map((tag, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 border border-zinc-200 dark:border-white/10 rounded text-[11px] font-medium text-zinc-600 dark:text-zinc-300 transition-colors">
-                                        {tag.trim()}
-                                    </span>
-                                ))
-                            )}
-                            {!tagsExpanded && (
-                                <span className="absolute right-0 top-0 px-2 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-[11px] font-medium text-zinc-600 dark:text-zinc-300 pointer-events-none">
-                                    +{t('more')}
-                                </span>
-                            )}
-                        </div>
+                        {songCaption && (
+                            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                                <p
+                                    className={`text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 ${captionExpanded ? '' : 'caption-clamp'}`}
+                                    style={{ '--caption-lines': 3 } as React.CSSProperties}
+                                >
+                                    {songCaption}
+                                </p>
+                                {canExpandCaption && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setCaptionExpanded(prev => !prev)}
+                                        className="mt-2 inline-flex items-center rounded-md bg-zinc-200 px-2 py-0.5 text-[11px] font-bold text-zinc-600 transition-colors hover:bg-zinc-300 hover:text-zinc-900 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600 dark:hover:text-white"
+                                    >
+                                        {captionExpanded ? 'Less' : `+${t('more')}`}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {displayTags.length > 0 && (
+                            <div className="space-y-1.5">
+                                <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tags</h3>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {(tagsExpanded ? displayTags : displayTags.slice(0, 7)).map(tag => (
+                                        <span key={tag} className="px-2 py-0.5 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 border border-zinc-200 dark:border-white/10 rounded text-[11px] font-medium text-zinc-600 dark:text-zinc-300 transition-colors">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                    {!tagsExpanded && displayTags.length > 7 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setTagsExpanded(true)}
+                                            className="px-2 py-0.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 rounded text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition-colors"
+                                        >
+                                            +{t('more')}
+                                        </button>
+                                    )}
+                                    {tagsExpanded && displayTags.length > 7 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setTagsExpanded(false)}
+                                            className="px-2 py-0.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 rounded text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white transition-colors"
+                                        >
+                                            Less
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {!songCaption && displayTags.length === 0 && (
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                No song details available.
+                            </p>
+                        )}
                     </div>
 
                     {/* Lyrics Section */}
