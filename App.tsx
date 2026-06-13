@@ -231,7 +231,7 @@ function AppContent() {
     setViewingProfilePreview(null);
     setCurrentView(profileReturnView);
     const returnPath =
-      profileReturnView === 'search' ? '/search' :
+      profileReturnView === 'search' ? '/library' :
       profileReturnView === 'library' ? '/library' :
       profileReturnView === 'song' && viewingSongId ? `/song/${viewingSongId}` :
       profileReturnView === 'playlist' && viewingPlaylistId ? `/playlist/${viewingPlaylistId}` :
@@ -309,7 +309,8 @@ function AppContent() {
           setCurrentView('playlist');
         }
       } else if (path === '/search') {
-        setCurrentView('search');
+        window.history.replaceState({}, '', '/library');
+        setCurrentView('library');
       }
     };
 
@@ -1522,8 +1523,6 @@ function AppContent() {
               window.history.pushState({}, '', '/');
             } else if (v === 'library') {
               window.history.pushState({}, '', '/library');
-            } else if (v === 'search') {
-              window.history.pushState({}, '', '/search');
             }
             if (isMobile) setShowLeftSidebar(false);
           }}

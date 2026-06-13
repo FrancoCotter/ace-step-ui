@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Song } from '../types';
-import { Heart, Share2, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers } from 'lucide-react';
+import { Heart, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers } from 'lucide-react';
 import { songsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
-import { ShareModal } from './ShareModal';
 import { AlbumCover } from './AlbumCover';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
@@ -34,7 +33,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [isOwner, setIsOwner] = useState(false);
     const [tagsExpanded, setTagsExpanded] = useState(false);
     const [captionExpanded, setCaptionExpanded] = useState(false);
-    const [shareModalOpen, setShareModalOpen] = useState(false);
     const [copiedStyle, setCopiedStyle] = useState(false);
     const [copiedLyrics, setCopiedLyrics] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -371,7 +369,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                     onReusePrompt={() => onReuse?.(song)}
                                     onDelete={() => onDelete?.(song)}
                                     onAddToPlaylist={() => onAddToPlaylist?.(song)}
-                                    onShare={() => setShareModalOpen(true)}
                                 />
                             </div>
                         </div>
@@ -444,7 +441,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 active={isLiked}
                                 onClick={() => onToggleLike?.(song.id)}
                             />
-                            <ActionButton icon={<Share2 size={22} />} onClick={() => setShareModalOpen(true)} />
                         </div>
                         <div className="flex items-center gap-2">
                             <button
@@ -669,13 +665,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                 </div>
             </div>
 
-            {song && (
-                <ShareModal
-                    isOpen={shareModalOpen}
-                    onClose={() => setShareModalOpen(false)}
-                    song={song}
-                />
-            )}
         </div>
     );
 };

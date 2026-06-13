@@ -1,14 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Song } from '../types';
-import { Play, MoreHorizontal, Heart, ThumbsDown, ListPlus, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Share2, Video, Info, Clock, BarChart3, X, Mic2 } from 'lucide-react';
+import { Play, MoreHorizontal, Heart, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Info, Clock, BarChart3, X, Mic2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
-import { ShareModal } from './ShareModal';
 import { AlbumCover } from './AlbumCover';
 import { songsApi } from '../services/api';
 import { getAvatarUrl } from '../utils/avatar';
-import { getSongTags } from '../utils/songMetadata';
+import { getSongCaption, getSongTags } from '../utils/songMetadata';
 
 interface SongListProps {
     songs: Song[];
@@ -155,6 +154,26 @@ const TooltipInfo: React.FC<{ text: string; align?: 'left' | 'right' }> = ({ tex
     </span>
 );
 
+const NowPlayingBars: React.FC<{ active: boolean }> = ({ active }) => (
+    <div className="flex w-5 flex-shrink-0 items-center justify-center">
+        {active && (
+            <div className="flex h-5 items-end gap-[2px] text-[#1ed760]" aria-label="Now playing">
+                {[0.78, 1.12, 0.9, 1.22, 0.72].map((height, index) => (
+                    <span
+                        key={index}
+                        className="w-[2px] bg-current music-bar-anim"
+                        style={{
+                            '--music-bar-max': `${height}rem`,
+                            animationDuration: `${0.62 + index * 0.05}s`,
+                            animationDelay: `${-index * 0.11}s`,
+                        } as React.CSSProperties}
+                    />
+                ))}
+            </div>
+        )}
+    </div>
+);
+
 const formatElapsedTime = (start: Date, now: number): string => {
     const elapsedSec = Math.max(0, Math.floor((now - start.getTime()) / 1000));
     const minutes = Math.floor(elapsedSec / 60);
@@ -284,11 +303,12 @@ export const SongList: React.FC<SongListProps> = ({
     const filteredSongs = useMemo(() => {
         const normalizedQuery = searchQuery.toLowerCase();
         return songs.filter(song => {
+            const songCaption = getSongCaption(song);
             const songTags = getSongTags(song);
             // 1. Search Logic
             const matchesSearch =
                 (song.title || '').toLowerCase().includes(normalizedQuery) ||
-                (song.style || '').toLowerCase().includes(normalizedQuery) ||
+                songCaption.toLowerCase().includes(normalizedQuery) ||
                 songTags.some(tag => tag.toLowerCase().includes(normalizedQuery));
 
             if (!matchesSearch) return false;
@@ -595,7 +615,6 @@ const SongItem: React.FC<SongItemProps> = ({
     const { token } = useAuth();
     const hasMeasuredProgress = typeof song.progress === 'number' && song.progress > 0;
     const [showDropdown, setShowDropdown] = useState(false);
-    const [shareModalOpen, setShareModalOpen] = useState(false);
     const [scoreModalOpen, setScoreModalOpen] = useState(false);
     const [imageError, setImageError] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -710,7 +729,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     }
                 }, 0);
             }}
-            className={`group flex items-center gap-4 p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-[#18181b] transition-all cursor-pointer border ${isSelected ? 'bg-zinc-100 dark:bg-[#18181b] border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'} ${song.audioUrl && !song.isGenerating ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            className={`group relative flex items-center gap-4 p-2 pr-14 rounded-lg hover:bg-zinc-100 dark:hover:bg-[#18181b] transition-all cursor-pointer border ${isSelected ? 'bg-zinc-100 dark:bg-[#18181b] border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'} ${song.audioUrl && !song.isGenerating ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
             {isSelectionMode && (
                 <button
@@ -729,6 +748,8 @@ const SongItem: React.FC<SongItemProps> = ({
                     <Check size={12} strokeWidth={3} className={isChecked ? 'text-white' : 'text-transparent'} />
                 </button>
             )}
+
+            <NowPlayingBars active={Boolean(isCurrent && isPlaying && !song.isGenerating)} />
 
             {/* Cover Art - Reduced size */}
             <div className="relative w-16 h-16 flex-shrink-0 rounded-md bg-zinc-200 dark:bg-zinc-800 overflow-hidden shadow-sm group/image">
@@ -784,192 +805,156 @@ const SongItem: React.FC<SongItemProps> = ({
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        {isEditingTitle && isOwner ? (
-                            <input
-                                ref={titleInputRef}
-                                type="text"
-                                value={editedTitle}
-                                onChange={(e) => setEditedTitle(e.target.value)}
-                                onBlur={handleSaveTitle}
-                                onKeyDown={handleTitleKeyDown}
-                                onClick={(e) => e.stopPropagation()}
-                                className="font-bold text-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-[#8fb68f] focus:outline-none text-zinc-900 dark:text-white min-w-0 flex-1"
-                            />
-                        ) : (
-                            <h3
-                                className={`min-w-0 font-bold text-lg truncate ${isCurrent ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
-                                onClick={(e) => {
-                                    if (isOwner && !song.isGenerating) {
-                                        e.stopPropagation();
-                                        setIsEditingTitle(true);
-                                    }
-                                }}
-                            >
-                                {song.title || (song.isGenerating ? (song.queuePosition ? "Queued..." : "Creating...") : "Untitled")}
-                            </h3>
-                        )}
-                        <span
-                            className="inline-flex shrink-0 items-center justify-center text-[9px] font-bold text-[#16301f] bg-[#8fbc8f] border border-[#a7cda6] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
-                            title={`DiT model: ${getSongModelId(song) || 'unknown'}`}
-                        >
-                            {getModelDisplayName(getSongModelId(song))}
-                        </span>
-                        {hasVerifiedDynamicLyrics && (
-                            <span
-                                className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-[#24412f] bg-[#c7d8c9] border border-[#d9e4d9] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:text-[#dcebdd] dark:bg-[#8fb68f]/20 dark:border-[#8fb68f]/35"
-                                title="Synced lyrics available in fullscreen"
-                            >
-                                <Mic2 size={10} strokeWidth={2.5} />
-                                LRC
-                            </span>
-                        )}
-                        {song.isPublic === false && (
-                            <Lock size={12} className="text-zinc-400 dark:text-zinc-500" />
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div
-                            className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+            <div className="flex-1 min-w-0 flex flex-col justify-center py-1">
+                <div className="flex items-center gap-2">
+                    {isEditingTitle && isOwner ? (
+                        <input
+                            ref={titleInputRef}
+                            type="text"
+                            value={editedTitle}
+                            onChange={(e) => setEditedTitle(e.target.value)}
+                            onBlur={handleSaveTitle}
+                            onKeyDown={handleTitleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-bold text-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-[#8fb68f] focus:outline-none text-zinc-900 dark:text-white min-w-0 flex-1"
+                        />
+                    ) : (
+                        <h3
+                            className={`min-w-0 font-bold text-lg truncate ${isCurrent ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
                             onClick={(e) => {
-                                e.stopPropagation();
-                                if (song.creator && onNavigateToProfile) {
-                                    onNavigateToProfile(song.creator);
+                                if (isOwner && !song.isGenerating) {
+                                    e.stopPropagation();
+                                    setIsEditingTitle(true);
                                 }
                             }}
                         >
-                            <div className="w-4 h-4 rounded-full bg-zinc-100 dark:bg-zinc-900 text-[8px] flex items-center justify-center font-bold text-white overflow-hidden border border-zinc-200 dark:border-white/10">
-                                <img src={getAvatarUrl(song.creator_avatar, song.creator)} alt={song.creator || 'Unknown'} className="w-full h-full object-cover" />
-                            </div>
-                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors hover:underline">
-                                {song.creator || 'Unknown'}
-                            </span>
-                        </div>
-                    </div>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-500 line-clamp-2 pt-1 font-medium max-w-2xl">
-                        {song.style}
-                    </p>
-                    {song.isGenerating && (
-                        <div className="pt-2">
-                            <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
-                                <span className="truncate">
-                                    {getGenerationStatusText(song, now)}
-                                </span>
-                                {hasMeasuredProgress && (
-                                    <span className="font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0">
-                                        {Math.round(Math.min(1, Math.max(0, song.progress)) * 100)}%
-                                    </span>
-                                )}
-                            </div>
-                            <div className="h-1 rounded-full bg-zinc-200/70 dark:bg-white/10 overflow-hidden">
-                                <div
-                                    className={`h-full bg-[#8fbc8f] transition-all ${!hasMeasuredProgress ? 'opacity-40 animate-pulse' : ''}`}
-                                    style={{
-                                        width: !hasMeasuredProgress
-                                            ? '18%'
-                                            : `${Math.min(100, Math.max(0, song.progress * 100))}%`,
-                                    }}
-                                />
-                            </div>
-                        </div>
+                            {song.title || (song.isGenerating ? (song.queuePosition ? "Queued..." : "Creating...") : "Untitled")}
+                        </h3>
+                    )}
+                    <span
+                        className="inline-flex shrink-0 items-center justify-center text-[9px] font-bold text-[#16301f] bg-[#8fbc8f] border border-[#a7cda6] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                        title={`DiT model: ${getSongModelId(song) || 'unknown'}`}
+                    >
+                        {getModelDisplayName(getSongModelId(song))}
+                    </span>
+                    {hasVerifiedDynamicLyrics && (
+                        <span
+                            className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-[#24412f] bg-[#c7d8c9] border border-[#d9e4d9] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:text-[#dcebdd] dark:bg-[#8fb68f]/20 dark:border-[#8fb68f]/35"
+                            title="Synced lyrics available in fullscreen"
+                        >
+                            <Mic2 size={10} strokeWidth={2.5} />
+                            LRC
+                        </span>
+                    )}
+                    {song.isPublic === false && (
+                        <Lock size={12} className="text-zinc-400 dark:text-zinc-500" />
                     )}
                 </div>
-
-                {/* Actions Row - Hidden while generating */}
-                {!song.isGenerating && (
-                    <div className="flex items-center gap-1 pt-2">
-                        <button
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'text-zinc-400 hover:text-black dark:hover:text-white'}`}
-                            onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
-                        >
-                            <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
-                            {(song.likeCount || 0) > 0 && (
-                                <span className="text-xs font-bold">{song.likeCount}</span>
+                <div className="flex items-center gap-2 mt-1.5">
+                    <div
+                        className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (song.creator && onNavigateToProfile) {
+                                onNavigateToProfile(song.creator);
+                            }
+                        }}
+                    >
+                        <div className="w-4 h-4 rounded-full bg-zinc-100 dark:bg-zinc-900 text-[8px] flex items-center justify-center font-bold text-white overflow-hidden border border-zinc-200 dark:border-white/10">
+                            <img src={getAvatarUrl(song.creator_avatar, song.creator)} alt={song.creator || 'Unknown'} className="w-full h-full object-cover" />
+                        </div>
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors hover:underline">
+                            {song.creator || 'Unknown'}
+                        </span>
+                    </div>
+                </div>
+                {song.isGenerating && (
+                    <div className="pt-2 max-w-2xl">
+                        <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
+                            <span className="truncate">
+                                {getGenerationStatusText(song, now)}
+                            </span>
+                            {hasMeasuredProgress && (
+                                <span className="font-mono text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                                    {Math.round(Math.min(1, Math.max(0, song.progress)) * 100)}%
+                                </span>
                             )}
-                        </button>
-
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                            onClick={(e) => { e.stopPropagation(); }}
-                        >
-                            <ThumbsDown size={16} />
-                        </button>
-
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                            onClick={(e) => { e.stopPropagation(); setShareModalOpen(true); }}
-                            title="Share"
-                        >
-                            <Share2 size={16} />
-                        </button>
-
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                            onClick={(e) => { e.stopPropagation(); if (onOpenVideo) onOpenVideo(); }}
-                            title="Create Video"
-                        >
-                            <Video size={16} />
-                        </button>
-
-                        {scoreRequested && (
-                            <button
-                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                onClick={(e) => { e.stopPropagation(); setScoreModalOpen(true); }}
-                                title="View scores"
-                            >
-                                <BarChart3 size={16} />
-                            </button>
-                        )}
-
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors ml-auto"
-                            onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
-                            title="Add to Playlist"
-                        >
-                            <ListPlus size={16} />
-                        </button>
-
-                        {/* Info Button - Visible only on small/medium screens where sidebar is hidden */}
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
-                            onClick={(e) => { e.stopPropagation(); if (onShowDetails) onShowDetails(); }}
-                            title="Song Details"
-                        >
-                            <Info size={16} />
-                        </button>
-
-                        <div className="relative">
-                            <button
-                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowDropdown(!showDropdown);
+                        </div>
+                        <div className="h-1 rounded-full bg-zinc-200/70 dark:bg-white/10 overflow-hidden">
+                            <div
+                                className={`h-full bg-[#8fbc8f] transition-all ${!hasMeasuredProgress ? 'opacity-40 animate-pulse' : ''}`}
+                                style={{
+                                    width: !hasMeasuredProgress
+                                        ? '18%'
+                                        : `${Math.min(100, Math.max(0, song.progress * 100))}%`,
                                 }}
-                            >
-                                <MoreHorizontal size={16} />
-                            </button>
-                            <SongDropdownMenu
-                                song={song}
-                                isOpen={showDropdown}
-                                onClose={() => setShowDropdown(false)}
-                                isOwner={isOwner}
-                                onCreateVideo={() => onOpenVideo?.(song)}
-                                onReusePrompt={onReusePrompt ? () => onReusePrompt?.(song) : undefined}
-                                onAddToPlaylist={() => onAddToPlaylist?.(song)}
-                                onDelete={() => onDelete?.(song)}
-                                onShare={() => setShareModalOpen(true)}
-                                onUseAsReference={() => onUseAsReference?.()}
-                                onCoverSong={() => onCoverSong?.()}
                             />
                         </div>
                     </div>
                 )}
             </div>
 
+            {/* Actions - Hidden while generating */}
+            {!song.isGenerating && (
+                <div className="flex shrink-0 items-center gap-2 pr-1">
+                    <button
+                        className={`flex items-center gap-1 px-2.5 py-2 rounded-full transition-all ${isLiked ? 'opacity-100 text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-zinc-400 hover:bg-zinc-200 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`}
+                        onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
+                        aria-label={isLiked ? 'Unlike song' : 'Like song'}
+                    >
+                        <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
+                        {(song.likeCount || 0) > 0 && (
+                            <span className="text-xs font-bold">{song.likeCount}</span>
+                        )}
+                    </button>
+
+                    {scoreRequested && (
+                        <button
+                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setScoreModalOpen(true); }}
+                            title="View scores"
+                        >
+                            <BarChart3 size={16} />
+                        </button>
+                    )}
+
+                    {/* Info Button - Visible only on small/medium screens where sidebar is hidden */}
+                    <button
+                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
+                        onClick={(e) => { e.stopPropagation(); if (onShowDetails) onShowDetails(); }}
+                        title="Song Details"
+                    >
+                        <Info size={16} />
+                    </button>
+
+                    <div className="relative">
+                        <button
+                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowDropdown(!showDropdown);
+                            }}
+                        >
+                            <MoreHorizontal size={16} />
+                        </button>
+                        <SongDropdownMenu
+                            song={song}
+                            isOpen={showDropdown}
+                            onClose={() => setShowDropdown(false)}
+                            isOwner={isOwner}
+                            onCreateVideo={() => onOpenVideo?.(song)}
+                            onReusePrompt={onReusePrompt ? () => onReusePrompt?.(song) : undefined}
+                            onAddToPlaylist={() => onAddToPlaylist?.(song)}
+                            onDelete={() => onDelete?.(song)}
+                            onUseAsReference={() => onUseAsReference?.()}
+                            onCoverSong={() => onCoverSong?.()}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Timestamp */}
-            <div className="text-xs font-mono text-zinc-500 dark:text-zinc-600 self-start pt-1">
+            <div className="absolute right-4 top-3 text-xs font-mono text-zinc-500 dark:text-zinc-600">
                 {song.isGenerating ? (
                     <span className={song.queuePosition ? 'text-amber-500' : 'text-[#8fbc8f]'}>
                         {song.queuePosition ? `#${song.queuePosition}` : formatElapsedTime(song.createdAt, now)}
@@ -978,11 +963,6 @@ const SongItem: React.FC<SongItemProps> = ({
             </div>
         </div>
 
-        <ShareModal
-            isOpen={shareModalOpen}
-            onClose={() => setShareModalOpen(false)}
-            song={song}
-        />
         {scoreModalOpen && (
             <div
                 className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"

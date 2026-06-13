@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 import { useResponsive } from '../context/ResponsiveContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
-import { ShareModal } from './ShareModal';
 import { AlbumCover } from './AlbumCover';
 
 type CoverPalette = {
@@ -719,7 +718,6 @@ export const Player: React.FC<PlayerProps> = ({
     const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [shareModalOpen, setShareModalOpen] = useState(false);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const [syncedLyrics, setSyncedLyrics] = useState<SyncedLyricLine[]>([]);
@@ -1160,16 +1158,9 @@ export const Player: React.FC<PlayerProps> = ({
                                 onReusePrompt={onReusePrompt}
                                 onAddToPlaylist={onAddToPlaylist}
                                 onDelete={onDelete}
-                                onShare={() => setShareModalOpen(true)}
                             />
                         </div>
                     )}
-
-                    <ShareModal
-                        isOpen={shareModalOpen}
-                        onClose={() => setShareModalOpen(false)}
-                        song={currentSong}
-                    />
                 </div>
             );
         }
@@ -1579,19 +1570,12 @@ export const Player: React.FC<PlayerProps> = ({
                                         onReusePrompt={onReusePrompt}
                                         onAddToPlaylist={onAddToPlaylist}
                                         onDelete={onDelete}
-                                        onShare={() => setShareModalOpen(true)}
                                     />
                                 )}
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <ShareModal
-                    isOpen={shareModalOpen}
-                    onClose={() => setShareModalOpen(false)}
-                    song={currentSong}
-                />
             </div>
         );
     }
@@ -1794,17 +1778,10 @@ export const Player: React.FC<PlayerProps> = ({
                             onReusePrompt={onReusePrompt}
                             onAddToPlaylist={onAddToPlaylist}
                             onDelete={onDelete}
-                            onShare={() => setShareModalOpen(true)}
                         />
                     </div>
                 </div>
             </div>
-
-            <ShareModal
-                isOpen={shareModalOpen}
-                onClose={() => setShareModalOpen(false)}
-                song={currentSong}
-            />
         </div>
     );
 };

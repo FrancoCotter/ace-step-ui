@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Song, Playlist } from '../types';
 import { usersApi, getAudioUrl, getCoverUrl, UserProfile as UserProfileType, songsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Play, Pause, Heart, Eye, Users, Music as MusicIcon, ChevronRight, Share2, MoreHorizontal, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Heart, Eye, Users, Music as MusicIcon, ChevronRight, MoreHorizontal, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
 

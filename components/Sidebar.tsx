@@ -1,5 +1,5 @@
 import React from 'react';
-import { Library, Disc, Search, LogIn, Sun, Moon, GraduationCap } from 'lucide-react';
+import { Library, Disc, LogIn, Sun, Moon, GraduationCap } from 'lucide-react';
 import { View } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
@@ -77,13 +77,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label={t('library')}
           active={currentView === 'library'}
           onClick={() => onNavigate('library')}
-          isExpanded={isOpen}
-        />
-        <NavItem
-          icon={<Search size={20} />}
-          label={t('search')}
-          active={currentView === 'search'}
-          onClick={() => onNavigate('search')}
           isExpanded={isOpen}
         />
         <NavItem

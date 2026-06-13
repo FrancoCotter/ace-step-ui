@@ -3,8 +3,7 @@ import { Song } from '../types';
 import { songsApi, getAudioUrl, getCoverUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
-import { ArrowLeft, Heart, Share2, MoreHorizontal, ThumbsDown, Music as MusicIcon, Edit3, Eye, Quote } from 'lucide-react';
-import { ShareModal } from './ShareModal';
+import { ArrowLeft, Heart, MoreHorizontal, ThumbsDown, Music as MusicIcon, Edit3, Eye, Quote } from 'lucide-react';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
@@ -201,7 +200,6 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
     const { t } = useI18n();
     const [song, setSong] = useState<Song | null>(initialSong);
     const [loading, setLoading] = useState(!initialSong);
-    const [shareModalOpen, setShareModalOpen] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [lyricsPanelRequested, setLyricsPanelRequested] = useState(() => {
         return localStorage.getItem('acestep_song_profile_lyrics_open') === 'true';
@@ -478,12 +476,6 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                         <span className="hidden md:inline">Edit</span>
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => setShareModalOpen(true)}
-                                    className="p-2 bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 rounded-full transition-colors"
-                                >
-                                    <Share2 size={16} className="text-zinc-700 dark:text-white" />
-                                </button>
                                 <div className="relative">
                                     <button
                                         onClick={() => setShowDropdown(!showDropdown)}
@@ -500,7 +492,6 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                                             onReusePrompt={() => {}}
                                             onAddToPlaylist={() => {}}
                                             onDelete={() => onDelete?.(song)}
-                                            onShare={() => setShareModalOpen(true)}
                                         />
                                     )}
                                 </div>
@@ -570,13 +561,6 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                 </div>
             </div>
 
-            {song && (
-                <ShareModal
-                    isOpen={shareModalOpen}
-                    onClose={() => setShareModalOpen(false)}
-                    song={song}
-                />
-            )}
         </div>
     );
 };
