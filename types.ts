@@ -3,6 +3,7 @@ export interface Song {
   title: string;
   lyrics: string;
   style: string;
+  caption?: string;
   coverUrl: string;
   duration: string;
   createdAt: Date;
@@ -15,11 +16,15 @@ export interface Song {
   audioUrl?: string;
   isPublic?: boolean;
   likeCount?: number;
+  like_count?: number;
   viewCount?: number;
+  view_count?: number;
   userId?: string;
   creator?: string;
   creator_avatar?: string;
   ditModel?: string;
+  hasDetails?: boolean;
+  isLiked?: boolean;
 }
 
 export interface Playlist {

@@ -128,6 +128,7 @@ export interface Song {
   creator_avatar?: string;
   ditModel?: string;
   generation_params?: any;
+  is_liked?: boolean;
 }
 
 // Transform songs to have proper audio URLs
@@ -146,9 +147,27 @@ function transformSongs(songs: Song[]): Song[] {
 }
 
 export const songsApi = {
-  getMySongs: async (token: string): Promise<{ songs: Song[] }> => {
-    const result = await api('/api/songs', { token }) as { songs: Song[] };
-    return { songs: transformSongs(result.songs) };
+  getMySongs: async (
+    token: string,
+    options: { limit?: number; offset?: number; summary?: boolean } = {}
+  ): Promise<{ songs: Song[]; total?: number; hasMore?: boolean; nextOffset?: number }> => {
+    const params = new URLSearchParams();
+    if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+    if (typeof options.offset === 'number') params.set('offset', String(options.offset));
+    if (options.summary) params.set('summary', '1');
+    const query = params.toString();
+    const result = await api(`/api/songs${query ? `?${query}` : ''}`, { token }) as {
+      songs: Song[];
+      total?: number;
+      hasMore?: boolean;
+      nextOffset?: number;
+    };
+    return {
+      songs: transformSongs(result.songs),
+      total: result.total,
+      hasMore: result.hasMore,
+      nextOffset: result.nextOffset,
+    };
   },
 
   getPublicSongs: async (limit = 20, offset = 0): Promise<{ songs: Song[] }> => {
@@ -229,6 +248,16 @@ export const songsApi = {
         creator: s.creator,
         creator_avatar: s.creator_avatar,
         ditModel: s.dit_model || s.ditModel,
+        generationParams: (() => {
+          try {
+            if (!s.generation_params && !s.generationParams) return undefined;
+            const params = s.generation_params ?? s.generationParams;
+            return typeof params === 'string' ? JSON.parse(params) : params;
+          } catch {
+            return undefined;
+          }
+        })(),
+        generation_params: s.generation_params,
         isGenerating: s.isGenerating,
         queuePosition: s.queuePosition,
         bpm: s.bpm,
@@ -383,7 +412,7 @@ export const generateApi = {
   getStatus: (jobId: string, token: string): Promise<GenerationJob> =>
     api(`/api/generate/status/${jobId}`, { token }),
 
-  getHistory: (token: string): Promise<{ jobs: GenerationJob[] }> =>
+  getHistory: (token: string): Promise<{ jobs: GenerationJob[]; serverNow?: string }> =>
     api('/api/generate/history', { token }),
 
   uploadAudio: async (file: File, token: string): Promise<{ url: string; key: string }> => {

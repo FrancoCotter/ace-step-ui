@@ -6,7 +6,6 @@ import { RightSidebar } from './components/RightSidebar';
 import { Player } from './components/Player';
 import { LibraryView } from './components/LibraryView';
 import { CreatePlaylistModal, AddToPlaylistModal } from './components/PlaylistModals';
-import { VideoGeneratorModal } from './components/VideoGeneratorModal';
 import { UsernameModal } from './components/UsernameModal';
 import { UserProfile } from './components/UserProfile';
 import { SettingsModal } from './components/SettingsModal';
@@ -23,6 +22,56 @@ import { SearchPage } from './components/SearchPage';
 import { TrainingPanel } from './components/TrainingPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
+const VideoGeneratorModal = React.lazy(() =>
+  import('./components/VideoGeneratorModal').then(module => ({ default: module.VideoGeneratorModal }))
+);
+
+const SONGS_PAGE_SIZE = 80;
+const MAX_RESUMABLE_JOB_AGE_MS = 3 * 60 * 60 * 1000;
+
+const StartupLoading: React.FC<{ progress: number }> = ({ progress }) => (
+  <div className="flex h-screen w-screen items-center justify-center bg-suno-DEFAULT text-white">
+    <div
+      className="select-none text-5xl md:text-7xl font-black tracking-tight text-transparent transition-all duration-500"
+      style={{
+        backgroundImage: `linear-gradient(0deg, rgba(255,255,255,0.98) ${progress}%, rgba(255,255,255,0.18) ${progress}%)`,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+      }}
+    >
+      ACEStudio
+    </div>
+  </div>
+);
+
+const parseGenerationCreatedAt = (value?: string): Date | null => {
+  if (!value) return null;
+  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const isFreshGenerationCreatedAt = (createdAt: Date): boolean => {
+  const ageMs = Date.now() - createdAt.getTime();
+  return ageMs >= -60_000 && ageMs <= MAX_RESUMABLE_JOB_AGE_MS;
+};
+
+const getResumableGenerationCreatedAt = (createdAtValue?: string, serverNowValue?: string): Date | null => {
+  const createdAt = parseGenerationCreatedAt(createdAtValue);
+  if (!createdAt) return null;
+
+  const serverNow = parseGenerationCreatedAt(serverNowValue);
+  if (serverNow) {
+    const serverAgeMs = serverNow.getTime() - createdAt.getTime();
+    if (serverAgeMs >= -60_000 && serverAgeMs <= MAX_RESUMABLE_JOB_AGE_MS) {
+      return new Date(Date.now() - Math.max(0, serverAgeMs));
+    }
+    return null;
+  }
+
+  return isFreshGenerationCreatedAt(createdAt) ? createdAt : null;
+};
 
 function AppContent() {
   // i18n
@@ -34,6 +83,7 @@ function AppContent() {
   // Auth
   const { user, token, isAuthenticated, isLoading: authLoading, setupUser, logout } = useAuth();
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [startupProgress, setStartupProgress] = useState(8);
   // Track multiple concurrent generation jobs
   const activeJobsRef = useRef<Map<string, { tempId: string; pollInterval: ReturnType<typeof setInterval> }>>(new Map());
   const [activeJobCount, setActiveJobCount] = useState(0);
@@ -49,6 +99,11 @@ function AppContent() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [likedSongIds, setLikedSongIds] = useState<Set<string>>(new Set());
   const [referenceTracks, setReferenceTracks] = useState<ReferenceTrack[]>([]);
+  const [isSongsLoading, setIsSongsLoading] = useState(false);
+  const [isLoadingMoreSongs, setIsLoadingMoreSongs] = useState(false);
+  const [hasMoreSongs, setHasMoreSongs] = useState(false);
+  const [songsNextOffset, setSongsNextOffset] = useState(0);
+  const [totalSongCount, setTotalSongCount] = useState<number | null>(null);
   const [playQueue, setPlayQueue] = useState<Song[]>([]);
   const [queueIndex, setQueueIndex] = useState(-1);
 
@@ -71,7 +126,8 @@ function AppContent() {
 
   // UI State
   const [isGenerating, setIsGenerating] = useState(false);
-  const [showRightSidebar, setShowRightSidebar] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [pendingAudioSelection, setPendingAudioSelection] = useState<{ target: 'reference' | 'source'; url: string; title?: string } | null>(null);
 
@@ -110,6 +166,9 @@ function AppContent() {
   const currentSongIdRef = useRef<string | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const playNextRef = useRef<() => void>(() => {});
+  const rightSidebarCloseTimerRef = useRef<number | null>(null);
+  const rightSidebarFrameRef = useRef<number | null>(null);
+  const isLoadingMoreSongsRef = useRef(false);
 
   // Mobile Details Modal State
   const [showMobileDetails, setShowMobileDetails] = useState(false);
@@ -154,6 +213,18 @@ function AppContent() {
     }
   }, [authLoading, isAuthenticated]);
 
+  useEffect(() => {
+    const target = authLoading ? 35 : isSongsLoading && songs.length === 0 ? 82 : 100;
+    setStartupProgress(prev => Math.max(prev, Math.min(target, prev + 8)));
+    const interval = window.setInterval(() => {
+      setStartupProgress(prev => {
+        if (prev >= target) return prev;
+        return Math.min(target, prev + (target - prev > 20 ? 7 : 3));
+      });
+    }, 180);
+    return () => window.clearInterval(interval);
+  }, [authLoading, isSongsLoading, songs.length]);
+
   // Load Playlists
   useEffect(() => {
     if (token) {
@@ -176,6 +247,12 @@ function AppContent() {
         clearInterval(pollInterval);
       });
       activeJobsRef.current.clear();
+      if (rightSidebarCloseTimerRef.current) {
+        window.clearTimeout(rightSidebarCloseTimerRef.current);
+      }
+      if (rightSidebarFrameRef.current) {
+        window.cancelAnimationFrame(rightSidebarFrameRef.current);
+      }
     };
   }, []);
 
@@ -184,6 +261,38 @@ function AppContent() {
     setShowMobileDetails(true);
   };
 
+  const openRightSidebar = useCallback(() => {
+    if (rightSidebarCloseTimerRef.current) {
+      window.clearTimeout(rightSidebarCloseTimerRef.current);
+      rightSidebarCloseTimerRef.current = null;
+    }
+    if (rightSidebarFrameRef.current) {
+      window.cancelAnimationFrame(rightSidebarFrameRef.current);
+      rightSidebarFrameRef.current = null;
+    }
+    setShowRightSidebar(true);
+    rightSidebarFrameRef.current = window.requestAnimationFrame(() => {
+      setIsRightSidebarVisible(true);
+      rightSidebarFrameRef.current = null;
+    });
+  }, []);
+
+  const closeRightSidebar = useCallback(() => {
+    if (!showRightSidebar) return;
+    if (rightSidebarCloseTimerRef.current) {
+      window.clearTimeout(rightSidebarCloseTimerRef.current);
+    }
+    if (rightSidebarFrameRef.current) {
+      window.cancelAnimationFrame(rightSidebarFrameRef.current);
+      rightSidebarFrameRef.current = null;
+    }
+    setIsRightSidebarVisible(false);
+    rightSidebarCloseTimerRef.current = window.setTimeout(() => {
+      setShowRightSidebar(false);
+      rightSidebarCloseTimerRef.current = null;
+    }, 300);
+  }, [showRightSidebar]);
+
   // Reuse Handler
   const handleReuse = (song: Song) => {
     setReuseData({ song, timestamp: Date.now() });
@@ -191,16 +300,71 @@ function AppContent() {
     setMobileShowList(false);
   };
 
+  const mapApiSong = useCallback((s: any, hasDetails = false): Song => ({
+    id: s.id,
+    title: s.title,
+    lyrics: s.lyrics || '',
+    style: s.style || '',
+    caption: s.caption,
+    coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id) || '',
+    duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
+    createdAt: new Date(s.created_at || s.createdAt),
+    tags: s.tags || [],
+    audioUrl: getAudioUrl(s.audio_url || s.audioUrl, s.id),
+    isPublic: s.is_public ?? s.isPublic,
+    likeCount: s.like_count ?? s.likeCount ?? 0,
+    like_count: s.like_count ?? s.likeCount ?? 0,
+    viewCount: s.view_count ?? s.viewCount ?? 0,
+    view_count: s.view_count ?? s.viewCount ?? 0,
+    userId: s.user_id || s.userId,
+    creator: s.creator,
+    creator_avatar: s.creator_avatar,
+    ditModel: s.dit_model || s.ditModel,
+    isGenerating: s.isGenerating,
+    queuePosition: s.queuePosition,
+    progress: s.progress,
+    stage: s.stage,
+    generationParams: (() => {
+      try {
+        if (!s.generation_params && !s.generationParams) return undefined;
+        const params = s.generation_params ?? s.generationParams;
+        return typeof params === 'string' ? JSON.parse(params) : params;
+      } catch {
+        return undefined;
+      }
+    })(),
+    hasDetails,
+    isLiked: Boolean(s.is_liked ?? s.isLiked),
+  }), []);
+
   // Song Update Handler
   const handleSongUpdate = (updatedSong: Song) => {
-    setSongs(prev => prev.map(s => s.id === updatedSong.id ? updatedSong : s));
-    if (currentSong?.id === updatedSong.id) {
-      setCurrentSong(updatedSong);
-    }
-    if (selectedSong?.id === updatedSong.id) {
-      setSelectedSong(updatedSong);
-    }
+    const mergeSong = (existing: Song | null | undefined) =>
+      existing && existing.id === updatedSong.id ? { ...existing, ...updatedSong } : existing;
+    setSongs(prev => prev.map(s => s.id === updatedSong.id ? { ...s, ...updatedSong } : s));
+    setPlayQueue(prev => prev.map(s => s.id === updatedSong.id ? { ...s, ...updatedSong } : s));
+    setCurrentSong(prev => mergeSong(prev) ?? null);
+    setSelectedSong(prev => mergeSong(prev) ?? null);
   };
+
+  const hydrateSongDetails = useCallback((song: Song) => {
+    if (!token || song.isGenerating || song.hasDetails) return;
+    songsApi.getSong(song.id, token)
+      .then(response => {
+        const detailedSong = mapApiSong(response.song, true);
+        setSongs(prev => prev.map(item => item.id === detailedSong.id ? { ...item, ...detailedSong } : item));
+        setPlayQueue(prev => prev.map(item => item.id === detailedSong.id ? { ...item, ...detailedSong } : item));
+        setSelectedSong(current => current?.id === detailedSong.id ? { ...current, ...detailedSong } : current);
+        setCurrentSong(current => current?.id === detailedSong.id ? { ...current, ...detailedSong } : current);
+      })
+      .catch(error => console.error('Failed to load song details:', error));
+  }, [token, mapApiSong]);
+
+  const handleSelectSong = useCallback((song: Song) => {
+    setSelectedSong(song);
+    openRightSidebar();
+    hydrateSongDetails(song);
+  }, [openRightSidebar, hydrateSongDetails]);
 
   // Navigate to Profile Handler
   const handleNavigateToProfile = (username: string) => {
@@ -322,69 +486,87 @@ function AppContent() {
 
   // Load Songs Effect
   useEffect(() => {
-    if (!isAuthenticated || !token) return;
+    if (!isAuthenticated || !token) {
+      setSongs([]);
+      setLikedSongIds(new Set());
+      setIsSongsLoading(false);
+      setHasMoreSongs(false);
+      setSongsNextOffset(0);
+      setTotalSongCount(null);
+      return;
+    }
 
     const loadSongs = async () => {
+      setIsSongsLoading(true);
       try {
-        const [mySongsRes, likedSongsRes] = await Promise.all([
-          songsApi.getMySongs(token),
-          songsApi.getLikedSongs(token)
-        ]);
+        let mySongsRes;
+        let loadedFromSummary = true;
+        try {
+          mySongsRes = await songsApi.getMySongs(token, {
+            limit: SONGS_PAGE_SIZE,
+            offset: 0,
+            summary: true,
+          });
+        } catch (summaryError) {
+          console.error('Failed to load summary songs, retrying full list:', summaryError);
+          loadedFromSummary = false;
+          mySongsRes = await songsApi.getMySongs(token);
+        }
 
-        const mapSong = (s: any): Song => ({
-          id: s.id,
-          title: s.title,
-          lyrics: s.lyrics,
-          style: s.style,
-          coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
-          duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
-          createdAt: new Date(s.created_at || s.createdAt),
-          tags: s.tags || [],
-          audioUrl: getAudioUrl(s.audio_url, s.id),
-          isPublic: s.is_public,
-          likeCount: s.like_count ?? s.likeCount ?? 0,
-          like_count: s.like_count ?? s.likeCount ?? 0,
-          viewCount: s.view_count ?? s.viewCount ?? 0,
-          view_count: s.view_count ?? s.viewCount ?? 0,
-          userId: s.user_id,
-          creator: s.creator,
-          ditModel: s.ditModel,
-          generationParams: (() => {
-            try {
-              if (!s.generation_params) return undefined;
-              return typeof s.generation_params === 'string' ? JSON.parse(s.generation_params) : s.generation_params;
-            } catch {
-              return undefined;
-            }
-          })(),
-        });
-
-        const mySongs = mySongsRes.songs.map(mapSong);
-        const likedSongs = likedSongsRes.songs.map(mapSong);
-
-        const songsMap = new Map<string, Song>();
-        [...mySongs, ...likedSongs].forEach(s => {
-          const existing = songsMap.get(s.id);
-          songsMap.set(s.id, existing ? { ...s, ...existing } : s);
-        });
+        const loadedSongs = mySongsRes.songs.map(s => mapApiSong(s, !loadedFromSummary));
 
         // Preserve any generating songs (temp songs)
         setSongs(prev => {
           const generatingSongs = prev.filter(s => s.isGenerating);
-          const loadedSongs = Array.from(songsMap.values());
           return [...generatingSongs, ...loadedSongs];
         });
-
-        const likedIds = new Set(likedSongs.map(s => s.id));
-        setLikedSongIds(likedIds);
+        setLikedSongIds(new Set(loadedSongs.filter(s => s.isLiked).map(s => s.id)));
+        setHasMoreSongs(Boolean(mySongsRes.hasMore));
+        setSongsNextOffset(mySongsRes.nextOffset ?? loadedSongs.length);
+        setTotalSongCount(mySongsRes.total ?? loadedSongs.length);
 
       } catch (error) {
         console.error('Failed to load songs:', error);
+      } finally {
+        setIsSongsLoading(false);
       }
     };
 
     loadSongs();
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, mapApiSong]);
+
+  const loadMoreSongs = useCallback(async () => {
+    if (!token || isSongsLoading || isLoadingMoreSongsRef.current || !hasMoreSongs) return;
+    isLoadingMoreSongsRef.current = true;
+    setIsLoadingMoreSongs(true);
+    try {
+      const response = await songsApi.getMySongs(token, {
+        limit: SONGS_PAGE_SIZE,
+        offset: songsNextOffset,
+        summary: true,
+      });
+      const loadedSongs = response.songs.map(s => mapApiSong(s, false));
+      setSongs(prev => {
+        const existingIds = new Set(prev.map(song => song.id));
+        return [...prev, ...loadedSongs.filter(song => !existingIds.has(song.id))];
+      });
+      setLikedSongIds(prev => {
+        const next = new Set(prev);
+        loadedSongs.forEach(song => {
+          if (song.isLiked) next.add(song.id);
+        });
+        return next;
+      });
+      setHasMoreSongs(Boolean(response.hasMore));
+      setSongsNextOffset(response.nextOffset ?? songsNextOffset + loadedSongs.length);
+      setTotalSongCount(response.total ?? totalSongCount);
+    } catch (error) {
+      console.error('Failed to load more songs:', error);
+    } finally {
+      isLoadingMoreSongsRef.current = false;
+      setIsLoadingMoreSongs(false);
+    }
+  }, [token, isSongsLoading, hasMoreSongs, songsNextOffset, totalSongCount, mapApiSong]);
 
   const loadReferenceTracks = useCallback(async () => {
     if (!isAuthenticated || !token) return;
@@ -711,34 +893,12 @@ function AppContent() {
   const refreshSongsList = useCallback(async () => {
     if (!token) return;
     try {
-      const response = await songsApi.getMySongs(token);
-      const loadedSongs: Song[] = response.songs.map(s => ({
-        id: s.id,
-        title: s.title,
-        lyrics: s.lyrics,
-        style: s.style,
-        coverUrl: getCoverUrl(s.cover_url || s.coverUrl, s.id),
-        duration: s.duration && s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : '0:00',
-        createdAt: new Date(s.created_at),
-        tags: s.tags || [],
-        audioUrl: getAudioUrl(s.audio_url, s.id),
-        isPublic: s.is_public,
-        likeCount: s.like_count ?? s.likeCount ?? 0,
-        like_count: s.like_count ?? s.likeCount ?? 0,
-        viewCount: s.view_count ?? s.viewCount ?? 0,
-        view_count: s.view_count ?? s.viewCount ?? 0,
-        userId: s.user_id,
-        creator: s.creator,
-        ditModel: s.ditModel,
-        generationParams: (() => {
-          try {
-            if (!s.generation_params) return undefined;
-            return typeof s.generation_params === 'string' ? JSON.parse(s.generation_params) : s.generation_params;
-          } catch {
-            return undefined;
-          }
-        })(),
-      }));
+      const response = await songsApi.getMySongs(token, {
+        limit: Math.max(SONGS_PAGE_SIZE, songsNextOffset || SONGS_PAGE_SIZE),
+        offset: 0,
+        summary: true,
+      });
+      const loadedSongs: Song[] = response.songs.map(s => mapApiSong(s, false));
 
       // Preserve any generating songs that aren't in the loaded list
       setSongs(prev => {
@@ -752,6 +912,10 @@ function AppContent() {
         // Sort by creation date, newest first
         return mergedSongs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       });
+      setLikedSongIds(new Set(loadedSongs.filter(s => s.isLiked).map(s => s.id)));
+      setHasMoreSongs(Boolean(response.hasMore));
+      setSongsNextOffset(response.nextOffset ?? loadedSongs.length);
+      setTotalSongCount(response.total ?? loadedSongs.length);
 
       // If the current selection was a temp/generating song, replace it with newest real song
       const current = selectedSongRef.current;
@@ -761,7 +925,7 @@ function AppContent() {
     } catch (error) {
       console.error('Failed to refresh songs:', error);
     }
-  }, [token]);
+  }, [token, songsNextOffset, mapApiSong]);
 
   const beginPollingJob = useCallback((jobId: string, tempId: string) => {
     if (!token) return;
@@ -820,14 +984,14 @@ function AppContent() {
     }, 600000);
   }, [token, cleanupJob, refreshSongsList]);
 
-  const buildTempSongFromParams = (params: GenerationParams, tempId: string, createdAt?: string) => ({
+  const buildTempSongFromParams = (params: GenerationParams, tempId: string, createdAt?: Date): Song => ({
     id: tempId,
     title: params.title || 'Generating...',
     lyrics: '',
     style: params.style || params.songDescription || '',
     coverUrl: getCoverUrl(undefined, 'generating'),
     duration: '--:--',
-    createdAt: createdAt ? new Date(createdAt) : new Date(),
+    createdAt: createdAt ?? new Date(),
     isGenerating: true,
     stage: 'Queued',
     tags: params.customMode ? ['custom'] : ['simple'],
@@ -873,7 +1037,7 @@ function AppContent() {
 
     setSongs(prev => [tempSong, ...prev]);
     setSelectedSong(tempSong);
-    setShowRightSidebar(true);
+    openRightSidebar();
 
     try {
       const job = await generateApi.startGeneration({
@@ -964,7 +1128,19 @@ function AppContent() {
         const jobs = Array.isArray(history.jobs) ? history.jobs : [];
 
         const activeStatuses = new Set(['pending', 'queued', 'running']);
-        const jobsToResume = jobs.filter((job: any) => activeStatuses.has(job.status));
+        const jobsToResume = jobs
+          .map((job: any) => ({
+            ...job,
+            createdAtDate: getResumableGenerationCreatedAt(job.created_at, history.serverNow),
+          }))
+          .filter((job: any) => {
+            if (!activeStatuses.has(job.status)) return false;
+            if (!job.createdAtDate || !isFreshGenerationCreatedAt(job.createdAtDate)) {
+              console.warn('Skipping stale generation job during resume:', job.id || job.jobId);
+              return false;
+            }
+            return true;
+          });
 
         if (jobsToResume.length === 0) return;
 
@@ -987,7 +1163,7 @@ function AppContent() {
               }
             })();
 
-            next.unshift(buildTempSongFromParams(params, tempId, job.created_at));
+            next.unshift(buildTempSongFromParams(params, tempId, job.createdAtDate));
             existingIds.add(tempId);
           }
           return next;
@@ -1055,13 +1231,14 @@ function AppContent() {
           }
         })
         .catch(err => console.error('Failed to track play:', err));
+      hydrateSongDetails(song);
     } else {
       togglePlay();
     }
     if (currentSong?.id === song.id) {
       setSelectedSong(song);
     }
-    setShowRightSidebar(true);
+    openRightSidebar();
   };
 
   const playSongAtTime = (song: Song, time: number) => {
@@ -1075,7 +1252,7 @@ function AppContent() {
       handleSeek(safeTime);
       setIsPlaying(true);
       setSelectedSong(song);
-      setShowRightSidebar(true);
+      openRightSidebar();
       return;
     }
 
@@ -1382,10 +1559,7 @@ function AppContent() {
             playlistId={viewingPlaylistId}
             onBack={handleBackFromPlaylist}
             onPlaySong={playSong}
-            onSelect={(s) => {
-              setSelectedSong(s);
-              setShowRightSidebar(true);
-            }}
+            onSelect={handleSelectSong}
             onNavigateToProfile={handleNavigateToProfile}
           />
         );
@@ -1455,14 +1629,16 @@ function AppContent() {
                 isPlaying={isPlaying}
                 referenceTracks={referenceTracks}
                 onPlay={playSong}
-                onSelect={(s) => {
-                  setSelectedSong(s);
-                  setShowRightSidebar(true);
-                }}
+                onSelect={handleSelectSong}
                 onToggleLike={toggleLike}
                 onAddToPlaylist={openAddToPlaylistModal}
                 onOpenVideo={openVideoGenerator}
                 onShowDetails={handleShowDetails}
+                isLoading={isSongsLoading}
+                isLoadingMore={isLoadingMoreSongs}
+                hasMore={hasMoreSongs}
+                totalSongs={totalSongCount}
+                onLoadMore={loadMoreSongs}
                 onNavigateToProfile={handleNavigateToProfile}
                 onReusePrompt={handleReuse}
                 onDelete={handleDeleteSong}
@@ -1477,22 +1653,32 @@ function AppContent() {
 
             {/* Right Sidebar */}
             {showRightSidebar && (
-              <div className="hidden xl:block w-[360px] flex-shrink-0 h-full bg-zinc-50 dark:bg-suno-panel relative z-10 border-l border-zinc-200 dark:border-white/5 transition-colors duration-300">
-                <RightSidebar
-                  song={selectedSong}
-                  onClose={() => setShowRightSidebar(false)}
-                  onOpenVideo={() => selectedSong && openVideoGenerator(selectedSong)}
-                  onReuse={handleReuse}
-                  onSongUpdate={handleSongUpdate}
-                  onNavigateToProfile={handleNavigateToProfile}
-                  onNavigateToSong={handleNavigateToSong}
-                  isLiked={selectedSong ? likedSongIds.has(selectedSong.id) : false}
-                  onToggleLike={toggleLike}
-                  onDelete={handleDeleteSong}
-                  onPlay={playSong}
-                  isPlaying={isPlaying}
-                  currentSong={currentSong}
-                />
+              <div
+                className={`hidden xl:block flex-shrink-0 h-full overflow-hidden bg-zinc-50 dark:bg-suno-panel transition-[width,background-color] duration-300 ease-out will-change-[width] ${
+                  isRightSidebarVisible ? 'w-[360px]' : 'w-0'
+                }`}
+              >
+                <div
+                  className={`h-full w-[360px] bg-zinc-50 dark:bg-suno-panel border-l border-zinc-200 dark:border-white/5 transition-[transform,opacity,background-color] duration-300 ease-out will-change-transform ${
+                    isRightSidebarVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+                  }`}
+                >
+                  <RightSidebar
+                    song={selectedSong}
+                    onClose={closeRightSidebar}
+                    onOpenVideo={() => selectedSong && openVideoGenerator(selectedSong)}
+                    onReuse={handleReuse}
+                    onSongUpdate={handleSongUpdate}
+                    onNavigateToProfile={handleNavigateToProfile}
+                    onNavigateToSong={handleNavigateToSong}
+                    isLiked={selectedSong ? likedSongIds.has(selectedSong.id) : false}
+                    onToggleLike={toggleLike}
+                    onDelete={handleDeleteSong}
+                    onPlay={playSong}
+                    isPlaying={isPlaying}
+                    currentSong={currentSong}
+                  />
+                </div>
               </div>
             )}
 
@@ -1510,6 +1696,15 @@ function AppContent() {
         );
     }
   };
+
+  const showStartupLoading = authLoading || (isAuthenticated && isSongsLoading && songs.length === 0);
+  if (showStartupLoading) {
+    return (
+      <StartupLoading
+        progress={startupProgress}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-suno-DEFAULT text-zinc-900 dark:text-white font-sans antialiased selection:bg-[#9bb89d]/30">
@@ -1600,11 +1795,15 @@ function AppContent() {
         isVisible={toast.isVisible}
         onClose={closeToast}
       />
-      <VideoGeneratorModal
-        isOpen={isVideoModalOpen}
-        onClose={() => setIsVideoModalOpen(false)}
-        song={songForVideo}
-      />
+      {isVideoModalOpen && (
+        <React.Suspense fallback={null}>
+          <VideoGeneratorModal
+            isOpen={isVideoModalOpen}
+            onClose={() => setIsVideoModalOpen(false)}
+            song={songForVideo}
+          />
+        </React.Suspense>
+      )}
       <UsernameModal
         isOpen={showUsernameModal}
         onSubmit={handleUsernameSubmit}

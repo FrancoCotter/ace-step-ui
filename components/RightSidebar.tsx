@@ -72,7 +72,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     }, [song?.id, song?.isGenerating]);
 
     const formatElapsedTime = (start: Date): string => {
-        const elapsedSec = Math.max(0, Math.floor((now - start.getTime()) / 1000));
+        const startMs = start.getTime();
+        if (!Number.isFinite(startMs)) return '0:00';
+        const elapsedSec = Math.max(0, Math.floor((now - startMs) / 1000));
         const minutes = Math.floor(elapsedSec / 60);
         const seconds = elapsedSec % 60;
         return `${minutes}:${String(seconds).padStart(2, '0')}`;

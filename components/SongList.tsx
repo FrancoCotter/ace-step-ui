@@ -31,6 +31,11 @@ interface SongListProps {
     onCoverSong?: (song: Song) => void;
     onUseUploadAsReference?: (track: { audio_url: string; filename: string }) => void;
     onCoverUpload?: (track: { audio_url: string; filename: string }) => void;
+    isLoading?: boolean;
+    isLoadingMore?: boolean;
+    hasMore?: boolean;
+    totalSongs?: number | null;
+    onLoadMore?: () => void;
 }
 
 // ... existing code ...
@@ -175,7 +180,9 @@ const NowPlayingBars: React.FC<{ active: boolean }> = ({ active }) => (
 );
 
 const formatElapsedTime = (start: Date, now: number): string => {
-    const elapsedSec = Math.max(0, Math.floor((now - start.getTime()) / 1000));
+    const startMs = start.getTime();
+    if (!Number.isFinite(startMs)) return '0:00';
+    const elapsedSec = Math.max(0, Math.floor((now - startMs) / 1000));
     const minutes = Math.floor(elapsedSec / 60);
     const seconds = elapsedSec % 60;
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
@@ -240,7 +247,12 @@ export const SongList: React.FC<SongListProps> = ({
     onUseAsReference,
     onCoverSong,
     onUseUploadAsReference,
-    onCoverUpload
+    onCoverUpload,
+    isLoading = false,
+    isLoadingMore = false,
+    hasMore = false,
+    totalSongs = null,
+    onLoadMore
 }) => {
     const { user } = useAuth();
     const { t } = useI18n();
@@ -251,6 +263,11 @@ export const SongList: React.FC<SongListProps> = ({
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [now, setNow] = useState(() => Date.now());
     const filterRef = useRef<HTMLDivElement>(null);
+    const loadMoreRef = useRef(onLoadMore);
+
+    useEffect(() => {
+        loadMoreRef.current = onLoadMore;
+    }, [onLoadMore]);
 
     const FILTERS: { id: FilterType; label: string; icon: React.ReactNode }[] = [
         { id: 'liked', label: t('liked'), icon: <ThumbsUp size={16} /> },
@@ -358,8 +375,20 @@ export const SongList: React.FC<SongListProps> = ({
     const allSelected = selectableSongs.length > 0 && selectableSongs.every(song => selectedIds.has(song.id));
     const selectedSongs = selectableSongs.filter(song => selectedIds.has(song.id));
 
+    const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+        if (!hasMore || isLoading || isLoadingMore || !loadMoreRef.current) return;
+        const target = event.currentTarget;
+        const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
+        if (remaining < 700) {
+            loadMoreRef.current();
+        }
+    };
+
     return (
-        <div className="flex-1 bg-white dark:bg-black h-full overflow-y-auto custom-scrollbar p-6 pb-32 transition-colors duration-300">
+        <div
+            className="flex-1 bg-white dark:bg-black h-full overflow-y-auto custom-scrollbar p-6 pb-32 transition-colors duration-300"
+            onScroll={handleScroll}
+        >
             <div className="max-w-5xl mx-auto w-full"> {/* Container constraint */}
 
                 {/* Header */}
@@ -484,7 +513,22 @@ export const SongList: React.FC<SongListProps> = ({
 
                 {/* List */}
                 <div className="space-y-2"> {/* Reduced vertical spacing */}
-                    {listItems.length === 0 ? (
+                    {isLoading ? (
+                        <div className="space-y-2">
+                            {Array.from({ length: 8 }).map((_, index) => (
+                                <div
+                                    key={index}
+                                    className="flex items-center gap-4 rounded-lg border border-transparent p-2"
+                                >
+                                    <div className="h-16 w-16 flex-shrink-0 rounded-md bg-zinc-100 dark:bg-white/5 animate-pulse" />
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="h-4 w-2/5 rounded bg-zinc-100 dark:bg-white/5 animate-pulse" />
+                                        <div className="h-3 w-24 rounded bg-zinc-100 dark:bg-white/5 animate-pulse" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : listItems.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-zinc-500 space-y-4 border border-dashed border-zinc-200 dark:border-white/5 rounded-2xl bg-zinc-50 dark:bg-white/[0.02]">
                             <div className="w-16 h-16 rounded-full bg-zinc-100 dark:bg-white/5 flex items-center justify-center">
                                 <Filter size={32} />
@@ -558,6 +602,24 @@ export const SongList: React.FC<SongListProps> = ({
                         ))
                     )}
                 </div>
+
+                {!isLoading && (hasMore || isLoadingMore) && (
+                    <div className="flex justify-center pt-6">
+                        <button
+                            type="button"
+                            onClick={() => onLoadMore?.()}
+                            disabled={isLoadingMore}
+                            className="inline-flex items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {isLoadingMore && <Loader2 size={14} className="animate-spin" />}
+                            {isLoadingMore
+                                ? 'Loading more songs...'
+                                : totalSongs && songs.length < totalSongs
+                                    ? `Load more (${songs.length}/${totalSongs})`
+                                    : 'Load more songs'}
+                        </button>
+                    </div>
+                )}
             </div> {/* End container */}
         </div>
     );
@@ -685,7 +747,16 @@ const SongItem: React.FC<SongItemProps> = ({
             setIsEditingTitle(false);
             // Update the parent component's song list
             if (onSongUpdate && response.song) {
-                onSongUpdate(response.song);
+                onSongUpdate({
+                    ...song,
+                    ...response.song,
+                    title: response.song.title ?? editedTitle.trim(),
+                    creator: response.song.creator ?? song.creator,
+                    creator_avatar: response.song.creator_avatar ?? song.creator_avatar,
+                    ditModel: response.song.ditModel ?? response.song.dit_model ?? song.ditModel,
+                    generationParams: response.song.generationParams ?? response.song.generation_params ?? song.generationParams,
+                    tags: response.song.tags ?? song.tags,
+                });
             }
         } catch (error) {
             console.error('Failed to update title:', error);
@@ -942,7 +1013,7 @@ const SongItem: React.FC<SongItemProps> = ({
                             isOpen={showDropdown}
                             onClose={() => setShowDropdown(false)}
                             isOwner={isOwner}
-                            onCreateVideo={() => onOpenVideo?.(song)}
+                            onCreateVideo={() => onOpenVideo?.()}
                             onReusePrompt={onReusePrompt ? () => onReusePrompt?.(song) : undefined}
                             onAddToPlaylist={() => onAddToPlaylist?.(song)}
                             onDelete={() => onDelete?.(song)}

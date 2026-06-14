@@ -702,7 +702,10 @@ router.get('/history', authMiddleware, async (req: AuthenticatedRequest, res: Re
       [req.user!.id]
     );
 
-    res.json({ jobs: result.rows });
+    res.json({
+      jobs: result.rows,
+      serverNow: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('Get history error:', error);
     res.status(500).json({ error: 'Internal server error' });

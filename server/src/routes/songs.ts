@@ -104,16 +104,28 @@ router.get('/:id/audio', optionalAuthMiddleware, async (req: AuthenticatedReques
 // Get user's songs
 router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const limitParam = Number.parseInt(req.query.limit as string, 10);
+    const offsetParam = Number.parseInt(req.query.offset as string, 10);
+    const hasPagination = Number.isFinite(limitParam);
+    const limit = Math.min(Math.max(limitParam || 80, 1), 200);
+    const offset = Math.max(offsetParam || 0, 0);
+    const summary = req.query.summary === '1' || req.query.summary === 'true';
+    const countResult = hasPagination
+      ? await pool.query('SELECT COUNT(*) as total FROM songs WHERE user_id = $1', [req.user!.id])
+      : null;
+
     const result = await pool.query(
-      `SELECT s.id, s.title, s.lyrics, s.style, s.caption, s.cover_url, s.audio_url,
+      `SELECT s.id, s.title, ${summary ? "'' as lyrics" : 's.lyrics'}, s.style, s.caption, s.cover_url, s.audio_url,
               s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.is_public, 
               s.like_count, s.view_count, s.user_id, s.created_at, s.generation_params,
-              COALESCE(u.username, 'Anonymous') as creator
+              COALESCE(u.username, 'Anonymous') as creator,
+              false as is_liked
        FROM songs s
        LEFT JOIN users u ON s.user_id = u.id
        WHERE s.user_id = $1
-       ORDER BY s.created_at DESC`,
-      [req.user!.id]
+       ORDER BY s.created_at DESC
+       ${hasPagination ? 'LIMIT $2 OFFSET $3' : ''}`,
+      hasPagination ? [req.user!.id, limit, offset] : [req.user!.id]
     );
 
     const songs = await Promise.all(
@@ -123,7 +135,12 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
       }))
     );
 
-    res.json({ songs });
+    res.json({
+      songs,
+      total: countResult ? Number(countResult.rows[0]?.total || 0) : songs.length,
+      hasMore: hasPagination ? offset + songs.length < Number(countResult?.rows[0]?.total || 0) : false,
+      nextOffset: hasPagination ? offset + songs.length : songs.length,
+    });
   } catch (error) {
     console.error('Get songs error:', error);
     res.status(500).json({ error: 'Internal server error' });
